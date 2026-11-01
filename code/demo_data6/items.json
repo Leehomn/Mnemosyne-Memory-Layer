@@ -1,0 +1,26 @@
+[
+  {
+    "text": "他明确说自己是学化学的。",
+    "source": "user_said",
+    "confidence": 0.9,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793416920.429721,
+    "subject": "about_user",
+    "kind": null
+  },
+  {
+    "text": "他可能习惯在聊天中主动补充个人信息。",
+    "source": "her_inference",
+    "confidence": 0.9,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793416920.4307942,
+    "subject": "about_user",
+    "kind": null
+  }
+]

@@ -1,0 +1,24 @@
+[
+  {
+    "text": "我叫南风",
+    "source": "user_said",
+    "confidence": 0.95,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793335001.1198997,
+    "subject": "about_user"
+  },
+  {
+    "text": "他喜欢打游戏",
+    "source": "her_inference",
+    "confidence": 0.6,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793335001.1229007,
+    "subject": "about_user"
+  }
+]

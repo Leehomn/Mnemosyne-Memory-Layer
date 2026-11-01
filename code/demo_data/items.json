@@ -1,0 +1,35 @@
+[
+  {
+    "text": "他叫南风",
+    "source": "user_said",
+    "confidence": 0.9,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793413485.802752,
+    "subject": "about_user"
+  },
+  {
+    "text": "他爱吃辣",
+    "source": "user_said",
+    "confidence": 0.9,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793413485.8037117,
+    "subject": "about_user"
+  },
+  {
+    "text": "他最近可能有点累",
+    "source": "her_inference",
+    "confidence": 0.9,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793413485.804157,
+    "subject": "about_user"
+  }
+]

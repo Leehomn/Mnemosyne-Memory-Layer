@@ -1,0 +1,20 @@
+{
+  "name": "cognition-memory",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "借鉴人类记忆若干特性的 AI 长期记忆层（设计阶段，未实施）",
+  "main": "src/index.mjs",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "notes": [
+    "零第三方依赖，只用 Node 内置模块",
+    "调用模型通过注入的 llm adapter，不绑定任何供应商",
+    "当前只有文档，src/ 和 test/ 尚未实现"
+  ]
+}

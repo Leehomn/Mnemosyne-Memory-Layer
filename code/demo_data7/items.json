@@ -1,0 +1,38 @@
+[
+  {
+    "text": "他叫南风",
+    "source": "user_said",
+    "confidence": 0.9,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793418424.1614983,
+    "subject": "about_user",
+    "kind": null
+  },
+  {
+    "text": "他爱吃辣，无辣不欢",
+    "source": "user_said",
+    "confidence": 0.9,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793418424.1663852,
+    "subject": "about_user",
+    "kind": null
+  },
+  {
+    "text": "他最近在找工作，压力大",
+    "source": "user_said",
+    "confidence": 0.9,
+    "layer": "episode",
+    "hits": 0,
+    "base_weight": 1.0,
+    "half_life": 14,
+    "created_at": 1793418424.1668165,
+    "subject": "about_user",
+    "kind": null
+  }
+]
