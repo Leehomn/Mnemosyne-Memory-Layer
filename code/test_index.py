@@ -73,3 +73,18 @@ def test_enhance(tmp_path):
     result = cog.remember("他爱吃辣", source="user_said", confidence=0.9)
     assert result is not None
     assert result["occurrences"] == 2
+
+def test_promote_state_to_trait(tmp_path):
+    from item import IMPRESSION_HALF_LIVES
+
+    cog = Cognition(data_dir=str(tmp_path))
+
+    # 记一条 state（动态表现），然后让它「反复出现」3 次
+    cog.remember("他最近很努力", source="observed", layer="impression", kind="state")
+    cog.remember("他最近很努力", source="observed", layer="impression", kind="state")
+    result = cog.remember("他最近很努力", source="observed", layer="impression", kind="state")
+
+    # 第 3 次出现 → 应该晋升成 trait
+    assert result["kind"] == "trait"
+    assert result["half_life"] == 3650
+    assert result["occurrences"] == 3

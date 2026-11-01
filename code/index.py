@@ -38,7 +38,7 @@ class Cognition:
 
     def remember(self, text, source, confidence=0.9, **kwargs):
         """
-        记一条记忆：新记忆则新增；遇到相似记忆则「增强」（occurrences+1）。
+        记一条记忆：新记忆则新增；遇到相似记忆则「增强」（次数+1、价值重估、可能晋升）。
         """
         item = make_item(text, source, confidence, **kwargs)
         if not is_valid(item):
@@ -50,10 +50,25 @@ class Cognition:
         for old in items:
             if old.get("text") == item["text"] or \
                     jaccard(old.get("text", ""), item["text"]) >= 0.5:
-                # 相似 → 增强（出现次数 +1），不丢弃
+                # —— 增强：出现次数 +1 ——
                 old["occurrences"] = old.get("occurrences", 1) + 1
+
+                # —— 价值重估：取更高（只升不降）——
+                if confidence > old.get("confidence", 0):
+                    old["confidence"] = confidence
+                new_bw = kwargs.get("base_weight")
+                if new_bw is not None and new_bw > old.get("base_weight", 0):
+                    old["base_weight"] = new_bw
+
+                # —— 晋升判断：state 反复出现够多 → 升 trait ——
+                if (old.get("layer") == "impression"
+                        and old.get("kind") == "state"
+                        and old["occurrences"] >= 3):
+                    old["kind"] = "trait"
+                    old["half_life"] = 3650
+
                 save_items(items, self.path)
-                return old  # 返回「增强后的旧记忆」
+                return old
 
         # 没找到相似 → 新增
         items.append(item)
