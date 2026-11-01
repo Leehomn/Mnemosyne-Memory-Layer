@@ -1,0 +1,19 @@
+# Python 缓存
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 配置文件（含 API key，绝不能上传）
+config.json
+
+# 运行时数据（含用户隐私）
+data/
+test_data*/
+demo_data*/
+
+# 编辑器/IDE 配置
+.idea/
+.vscode/
+
+# 其他
+*.bak-*
