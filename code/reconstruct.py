@@ -81,3 +81,58 @@ def reconstruct(llm, buffer, remember_func):
             added += 1
 
     return added
+
+def consolidate(llm, episodes, remember_func):
+    """
+    夜间整合：把一堆事件（episode）归纳成印象（impression）。
+
+    关键：归纳出的印象，来源是 observed（反复说的）/ her_inference（推断的），
+    绝不标 user_said（那是「用户直接说的即时印象」专属）。
+
+    参数：
+        llm           : 模型函数
+        episodes      : 事件列表（layer=episode 的记忆）
+        remember_func : 写记忆的函数
+
+    返回：
+        新增的印象条数
+    """
+    if not episodes:
+        return 0
+
+    # 1. 拼事件列表
+    lines = "\n".join(f"- {e['text']}" for e in episodes)
+
+    # 2. 拼提示词
+    prompt = (
+        "下面是一段时间里发生的若干事件。请从这些事件里，归纳出「反复出现、跨事件的规律」。\n\n"
+        "事件：\n" + lines + "\n\n"
+        "【严格输出格式，必须遵守】\n"
+        "每行一条，只能以下面两种前缀开头，除此之外什么都不能有：\n"
+        "[事实] 后面写：他反复明确表达过的稳定特点\n"
+        "[猜测] 后面写：你从事件里推断出的规律\n"
+        "没有反复出现的规律，就只输出一个词：无\n"
+        "不要写「有」「好的」等其他任何话，不要解释。\n"
+        "【只归纳「反复出现」的，单次事件不要归纳】\n"
+    )
+
+    # 3. 调模型 + 解析
+    reply = llm(prompt)
+    items = parse_reply(reply)
+
+    # 4. 写入：把 [事实] 的来源从 user_said 改成 observed
+    added = 0
+    for it in items:
+        if it["source"] == "user_said":
+            source = "observed"      # 归纳的「事实」= 观察到的反复，不是原话
+        else:
+            source = "her_inference"
+        result = remember_func(
+            it["text"],
+            source=source,
+            layer="impression",
+        )
+        if result is not None:
+            added += 1
+
+    return added
