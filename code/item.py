@@ -18,21 +18,13 @@ IMPRESSION_HALF_LIVES = {
 
 def make_item(text, source, confidence, layer="episode", hits=0,
               base_weight=1.0, half_life=None, created_at=None,
-              subject="about_user", kind=None):
+              subject="about_user", kind=None, occurrences=1):
     """
     创建一条记忆条目（返回一个字典）。
 
     参数：
-        text       : 记忆内容（一句话）
-        source     : 来源（user_said / her_inference / observed / third_party）
-        confidence : 置信度（0 ~ 1）
-        layer      : 类型（episode / impression / relationship），默认 episode
-        hits       : 被想起次数，默认 0
-        base_weight: 初始权重，默认 1.0
-        half_life  : 半衰期（天）。不传则按 layer 自动取
-        created_at : 创建时间戳（秒），默认当前时间
-        subject    : 关于谁（about_user / about_self / about_us），默认 about_user
-        kind       : 印象的子类型（trait / state），仅 layer=impression 时有意义
+        ...（原有参数不变）
+        occurrences : 在对话里反复出现的次数（默认 1，即第一次出现）
 
     返回：
         一个字典，代表一条记忆
@@ -40,10 +32,8 @@ def make_item(text, source, confidence, layer="episode", hits=0,
     if created_at is None:
         created_at = time.time()
 
-    # 没传 half_life → 自动取
     if half_life is None:
         if layer == "impression" and kind in IMPRESSION_HALF_LIVES:
-            # 印象：按 kind 细分半衰期（trait 近乎永久，state 两个月）
             half_life = IMPRESSION_HALF_LIVES[kind]
         else:
             half_life = HALF_LIVES.get(layer, 14)
@@ -59,6 +49,7 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         "created_at": created_at,
         "subject": subject,
         "kind": kind,
+        "occurrences": occurrences,   # 新增
     }
     return item
 

@@ -51,6 +51,3 @@ def test_reconstruct_full():
     block = cog.recall_block(limit=8)
     assert "他叫南风" in block
     assert "他可能喜欢打游戏" in block
-
-
-print("reconstruct 全部测试通过 ✅")

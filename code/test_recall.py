@@ -68,5 +68,3 @@ def test_semantic_recall_none():
 
     result = semantic_recall(fake_none, items, "随便聊聊")
     assert result == []
-
-print("recall 全部测试通过 ✅")

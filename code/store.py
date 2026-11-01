@@ -73,3 +73,24 @@ def backup_file(path):
         dst.write(content)
 
     return backup_path
+
+def update_items(items, matcher, updater, path="data/items.json"):
+    """
+    修改记忆：对满足 matcher 条件的记忆，用 updater 更新它。
+
+    参数：
+        items   : 记忆列表
+        matcher : 判断函数（对每条记忆，返回 True 就改它）
+        updater : 更新函数（对要改的记忆，直接改它的字段）
+
+    返回：
+        修改的条数
+    """
+    changed = 0
+    for m in items:
+        if matcher(m):
+            updater(m)
+            changed += 1
+    if changed:
+        save_items(items, path)
+    return changed

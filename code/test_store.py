@@ -30,6 +30,3 @@ def test_backup():
     b = backup_file("data/items.json")
     assert b is not None
     assert os.path.exists(b)
-
-
-print("store 全部测试通过 ✅")

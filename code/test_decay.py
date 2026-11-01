@@ -35,6 +35,5 @@ rise_large = g101 - g100       # 100→101 的涨幅
 
 assert rise_small > rise_large * 20, f"前面应比后面涨幅大得多，实际 {rise_small} vs {rise_large}"
 
-print("全部测试通过 ✅")
 print("hits 1→2 涨幅：", round(rise_small, 4))
 print("hits 100→101 涨幅：", round(rise_large, 6))

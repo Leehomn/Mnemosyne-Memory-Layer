@@ -46,5 +46,3 @@ state = make_item("他最近压力很大", "her_inference", 0.7, layer="impressi
 
 assert trait["half_life"] == 3650   # 稳定内核：近乎永久
 assert state["half_life"] == 60     # 动态表现：两个月
-
-print("item 全部测试通过 ✅")

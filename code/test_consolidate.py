@@ -30,6 +30,3 @@ def test_consolidate():
     assert collected[0]["layer"] == "impression"
     # 「他最近压力大」是 [猜测]，来源是 her_inference
     assert collected[1]["source"] == "her_inference"
-
-
-print("consolidate 全部测试通过 ✅")
