@@ -98,3 +98,5 @@ const block = await cog.recall({ subject: 'user:884273334', queryText: '今天�
 - **方式 B**：验证通过后替换现有记忆层
 
 阶段一绝不干预现有系统的行为。
+
+> 本项目用 Git 管理版本。首次提交于 2026-11-01。
