@@ -1,6 +1,7 @@
 # test_reconstruct.py —— 测试 reconstruct 模块
 
-from reconstruct import parse_reply
+from reconstruct import parse_reply, reconstruct
+from index import Cognition
 
 
 def test_parse_fact_and_guess():
@@ -26,17 +27,14 @@ def test_parse_wu():
     items = parse_reply("无")
     assert items == []
 
-from reconstruct import reconstruct
-from index import Cognition
-
 
 def fake_llm(prompt):
     return "[事实] 他叫南风\n[猜测] 他可能喜欢打游戏"
 
 
-def test_reconstruct_full():
-    # 用独立的测试数据目录
-    cog = Cognition(data_dir="test_data")
+def test_reconstruct_full(tmp_path):
+    # 用独立的临时数据目录，避免污染真实数据
+    cog = Cognition(data_dir=str(tmp_path))
 
     # 一段对话（buffer）
     buffer = ["用户：我叫南风", "AI：好的，记住了"]

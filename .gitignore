@@ -15,5 +15,16 @@ demo_data*/
 .idea/
 .vscode/
 
+# 内部/个人文档（不开源，含个人背景与内部交接）
+HANDOFF.md
+交接文档.md
+方向锚点.md
+复习总纲.md
+定位与参考.md
+兼职交接.md
+
+# 一次性检查脚本
+check_key_leak.py
+
 # 其他
 *.bak-*

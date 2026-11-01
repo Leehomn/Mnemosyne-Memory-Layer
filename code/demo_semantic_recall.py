@@ -1,3 +1,8 @@
+# demo_semantic_recall.py —— 语义召回演示（真 DeepSeek 版）
+
+# 说明：需要先在 config.json 里填好有效的 api_key，否则会调用失败。
+# 运行：在 code/ 目录下执行  python demo_semantic_recall.py
+
 from llm import make_deepseek_llm
 from index import Cognition
 
