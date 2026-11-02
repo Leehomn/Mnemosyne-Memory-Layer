@@ -88,10 +88,10 @@ def format_recall_block(items):
 
 def semantic_recall(llm, items, query):
     """
-    用模型判断：items 里哪些和 query 相关。
+    用模型综合判断：items 里哪些和 query 相关（含时间远近、含反义/过时）。
 
     参数：
-        llm   : 模型函数（给它提示词，返回回答）
+        llm   : 模型函数
         items : 记忆列表
         query : 当前对话（用户这句话）
 
@@ -101,15 +101,30 @@ def semantic_recall(llm, items, query):
     if not items:
         return []
 
-    # 1. 把记忆编号列出来
-    lines = "\n".join(f"{i}. {m['text']}" for i, m in enumerate(items))
+    # 1. 把记忆编号 + 时间一起列出来
+    lines = []
+    for i, m in enumerate(items):
+        # 算这条记忆大概「几天前」的，帮模型判断「近不近」
+        import time as _time
+        age_days = (_time.time() - m.get("created_at", 0)) / 86400
+        if age_days < 0:
+            age_days = 0
+        age_text = "刚刚" if age_days < 1 else f"{int(age_days)}天前"
+        lines.append(f"{i}. {m['text']}（{age_text}）")
+    lines_str = "\n".join(lines)
 
     # 2. 拼提示词
     prompt = (
-        "下面是一批记忆（编号从 0 开始）。请判断哪些和「当前这句话」相关。\n\n"
-        "记忆：\n" + lines + "\n\n"
+        "下面是一批记忆（编号从 0 开始，括号里是多久之前记的）。"
+        "请判断哪些和「当前这句话」真正相关。\n\n"
+        "记忆：\n" + lines_str + "\n\n"
         "当前这句话：「" + query + "」\n\n"
-        "只输出相关的编号（用逗号分隔，比如 0,2）。没有相关就只输出一个词：无\n"
+        "判断时注意：\n"
+        "- 相关 = 语义上真正有关（不要只看字面重合）。\n"
+        "- 尤其注意「反义/过时」：比如记忆是「他爱吃辣」，但现在说「他不吃辣了」，"
+        "那么旧记忆「他爱吃辣」已过时，不要当作相关召回。\n"
+        "- 时间近的优先于时间远的。\n\n"
+        "只输出相关的编号（用逗号分隔，比如 0,2）。没有真正相关的就只输出一个词：无\n"
         "不要输出任何其他内容，不要解释。"
     )
 
@@ -123,9 +138,9 @@ def semantic_recall(llm, items, query):
     ids = []
     for part in reply.split(","):
         part = part.strip()
-        if part.isdigit():          # 是数字才认
+        if part.isdigit():
             idx = int(part)
-            if 0 <= idx < len(items):  # 编号在范围内才认
+            if 0 <= idx < len(items):
                 ids.append(idx)
 
     return [items[i] for i in ids]
