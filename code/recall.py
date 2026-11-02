@@ -30,6 +30,9 @@ def recall(items, limit=8, now=None):
     返回：
         按权重排序后的前 limit 条
     """
+    # 先过滤掉已失效（墓碑）的记忆
+    items = [m for m in items if not m.get("deleted")]
+
     # 1. 给每条记忆算权重，存进 (权重, 记忆) 的列表
     scored = []
     for m in items:
@@ -98,6 +101,8 @@ def semantic_recall(llm, items, query):
     返回：
         相关的记忆列表（可能为空）
     """
+    # 先过滤掉已失效（墓碑）的记忆
+    items = [m for m in items if not m.get("deleted")]
     if not items:
         return []
 

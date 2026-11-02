@@ -134,3 +134,30 @@ def test_consolidate_promotes_existing(tmp_path):
     print("吃辣相关的记忆条数：", len(chila))
     for m in chila:
         print("  -", m["text"], "| occurrences =", m.get("occurrences"))
+
+def test_conflict_marks_deleted(tmp_path):
+    from index import Cognition
+
+    # 假模型：回答「冲突的编号是 0」
+    def fake_llm(prompt):
+        # 冲突检测时会返回「0」（第 0 条冲突）
+        if "冲突" in prompt:
+            return "0"
+        # 其他情况返回无
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 先存「他爱吃辣」
+    cog.remember("他爱吃辣", source="user_said", confidence=0.9)
+
+    # 用户说「我不吃辣了」→ 触发冲突检测
+    cog.remember("我不吃辣了", source="user_said", confidence=0.9)
+
+    # 检查：「他爱吃辣」应该被标 deleted=True
+    from store import load_items
+    items = load_items(cog.path)
+    chila = [m for m in items if "爱吃辣" in m.get("text", "")]
+    assert len(chila) == 1
+    assert chila[0]["deleted"] == True          # 被标失效
+    assert chila[0]["superseded_by"] == "我不吃辣了"  # 记录了被谁推翻

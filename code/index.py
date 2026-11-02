@@ -37,13 +37,20 @@ class Cognition:
         self.llm = llm
 
     def remember(self, text, source, confidence=0.9, **kwargs):
-        """
-        记一条记忆：新记忆则新增；遇到相似记忆则「增强」（次数+1、价值重估、可能晋升）。
-        """
         item = make_item(text, source, confidence, **kwargs)
         if not is_valid(item):
             return None
 
+        items = load_items(self.path)
+
+        # —— 反证检测：新记忆和旧记忆冲突时，把旧的标失效 ——
+        if self.llm is not None and items:
+            from conflict import find_conflicts
+            conflicts = find_conflicts(self.llm, text, items)
+            for old in conflicts:
+                self.mark_deleted(old, reason="被新信息推翻", superseded_by=text)
+
+        # 重新读库（因为 mark_deleted 已经改过库）
         items = load_items(self.path)
 
         # 找相似的旧记忆
@@ -130,6 +137,23 @@ class Cognition:
         removed = len(items) - len(kept)
         save_items(kept, self.path)
         return removed
+
+    def mark_deleted(self, old_item, reason, superseded_by=None):
+        """
+        把一条旧记忆标记为「失效」（墓碑，不物理删除）。
+
+        返回：
+            更新后的记忆
+        """
+        items = load_items(self.path)
+        for m in items:
+            if m.get("text") == old_item.get("text") and m.get("created_at") == old_item.get("created_at"):
+                m["deleted"] = True
+                m["deleted_reason"] = reason
+                m["superseded_by"] = superseded_by
+                break
+        save_items(items, self.path)
+        return old_item
 
     def consolidate(self):
         """

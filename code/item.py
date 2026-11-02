@@ -49,7 +49,10 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         "created_at": created_at,
         "subject": subject,
         "kind": kind,
-        "occurrences": occurrences,   # 新增
+        "occurrences": occurrences,   # 在对话里反复出现的次数
+        "deleted": False,            # 是否已失效（墓碑）
+        "deleted_reason": None,      # 为什么失效（如「被用户纠正」）
+        "superseded_by": None,       # 被哪条新记忆推翻
     }
     return item
 
