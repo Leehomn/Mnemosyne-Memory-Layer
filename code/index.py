@@ -179,3 +179,24 @@ class Cognition:
         # 3. 调 reconstruct 里的 consolidate，用 self.remember 写入
         added = _consolidate(self.llm, episodes, self.remember)
         return added
+
+    def update_confidence(self, item, new_confidence, reason=None):
+        """
+        更新一条记忆的置信度（验证确认→升，否认→降）。
+
+        返回：
+            更新后的记忆
+        """
+        items = load_items(self.path)
+        for m in items:
+            if m.get("text") == item.get("text") and m.get("created_at") == item.get("created_at"):
+                m["confidence"] = max(0.0, min(1.0, new_confidence))
+                if reason:
+                    m["deleted_reason"] = reason
+                break
+        save_items(items, self.path)
+        return item
+
+    def _all_items(self):
+        """读库，返回所有记忆（内部用）。"""
+        return load_items(self.path)
