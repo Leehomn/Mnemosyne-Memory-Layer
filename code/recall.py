@@ -65,7 +65,7 @@ def format_recall_block(items):
     """
     # 事实：用户说的，高置信，且不是「关于AI自己」的
     facts = [m for m in items
-             if m["source"] == "user_said"
+             if m["source"] in ("user_said", "observed")  # ← 加上 observed
              and m["confidence"] >= 0.8
              and m["subject"] != "about_self"]
 

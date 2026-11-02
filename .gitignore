@@ -10,6 +10,7 @@ config.json
 data/
 test_data*/
 demo_data*/
+chat_data/
 
 # 编辑器/IDE 配置
 .idea/

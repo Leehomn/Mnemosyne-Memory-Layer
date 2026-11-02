@@ -88,3 +88,49 @@ def test_promote_state_to_trait(tmp_path):
     assert result["kind"] == "trait"
     assert result["half_life"] == 3650
     assert result["occurrences"] == 3
+
+def test_consolidate_method(tmp_path):
+    from index import Cognition
+
+    def fake_llm(prompt):
+        return "[事实] 他爱吃辣"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 记几条 episode
+    cog.remember("他说无辣不欢", source="user_said", layer="episode")
+    cog.remember("他说吃火锅要特辣", source="user_said", layer="episode")
+
+    # 夜间整合（自动读 episode）
+    added = cog.consolidate()
+
+    assert added == 1
+
+    # 库里应该多了一条 impression
+    block = cog.recall_block(limit=10)
+    assert "他爱吃辣" in block
+
+def test_consolidate_promotes_existing(tmp_path):
+    from index import Cognition
+
+    def fake_llm(prompt):
+        return "[事实] 他爱吃辣"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 库里先有一条「他爱吃辣」的印象（state）
+    cog.remember("他爱吃辣", source="observed", layer="impression", kind="state")
+
+    # 又积累了一堆事件（反复说吃辣）
+    cog.remember("他说无辣不欢", source="user_said", layer="episode")
+    cog.remember("他说火锅要特辣", source="user_said", layer="episode")
+
+    # 夜间整合
+    cog.consolidate()
+
+    # 关键：库里应该只有「一条」关于吃辣的记忆（没新建重复的）
+    items = load_items(cog.path)
+    chila = [m for m in items if "辣" in m.get("text", "")]
+    print("吃辣相关的记忆条数：", len(chila))
+    for m in chila:
+        print("  -", m["text"], "| occurrences =", m.get("occurrences"))

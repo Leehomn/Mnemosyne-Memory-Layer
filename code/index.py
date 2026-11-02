@@ -130,3 +130,28 @@ class Cognition:
         removed = len(items) - len(kept)
         save_items(kept, self.path)
         return removed
+
+    def consolidate(self):
+        """
+        夜间整合：自动读库，把 episode 归纳成 impression。
+
+        返回：
+            新增的印象条数
+        """
+        from reconstruct import consolidate as _consolidate
+
+        items = load_items(self.path)
+
+        # 1. 筛选出所有 episode（事件）
+        episodes = [m for m in items if m.get("layer") == "episode"]
+
+        if not episodes:
+            return 0
+
+        # 2. 需要 llm 才能归纳
+        if self.llm is None:
+            return 0
+
+        # 3. 调 reconstruct 里的 consolidate，用 self.remember 写入
+        added = _consolidate(self.llm, episodes, self.remember)
+        return added
