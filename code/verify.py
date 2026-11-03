@@ -43,16 +43,29 @@ def should_ask_now(llm, user_text):
         "不要输出其他任何内容。"
     )
     reply = llm(prompt).strip()
-    return "是" in reply
+
+    # 不能用 "是" in reply —— "不是" 里也含 "是"，会把否定读成肯定。
+    # 先判否定，再判肯定；两边都不沾就当作「不适合问」。
+    if not reply:
+        return False
+    if "否" in reply or "不" in reply:
+        return False
+    return "是" in reply or "yes" in reply.lower()
 
 
-def judge_feedback(reply_text, llm):
+def judge_feedback(llm, reply_text):
     """
     判断用户对「求证」的回答，是「确认 / 否认 / 无关」。
+
+    参数顺序与全项目一致：llm 在前。
+    兼容旧写法 judge_feedback(reply_text, llm) —— 见下方自动纠正。
 
     返回：
         "confirm" / "deny" / "unrelated"
     """
+    # 兼容旧调用：老代码把 llm 放在第二位，这里自动换回来，不让它静默算错。
+    if callable(reply_text) and not callable(llm):
+        llm, reply_text = reply_text, llm
     prompt = (
         "用户在回应一个「求证」。请判断他的态度：\n"
         "求证的内容是关于他的一个猜测。\n\n"
@@ -63,10 +76,19 @@ def judge_feedback(reply_text, llm):
         "unrelated —— 他没正面回应，或聊了别的\n"
         "不要输出其他任何内容。"
     )
-    reply = llm(prompt).strip()
+    reply = llm(prompt).strip().lower()
+
+    # 判定顺序很重要：
+    # 1) 先认 deny（模型照格式回答时最常见）
+    # 2) 再认「含有否定词的 confirm」—— "not confirm" 这种串里没有 deny 字样，
+    #    只查 deny 会漏掉，最后被 confirm 捡走，否认就变成了确认。
+    # 3) 最后才认干净的 confirm
     if "deny" in reply:
         return "deny"
     if "confirm" in reply:
+        negations = ("not", "n't", "no ", "非", "不", "否")
+        if any(neg in reply.replace("confirm", "") for neg in negations):
+            return "deny"
         return "confirm"
     return "unrelated"
 

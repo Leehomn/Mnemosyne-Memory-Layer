@@ -1,8 +1,30 @@
 # reconstruct.py —— 事后重构（把对话提炼成认识）
 
+import re
+
+# 行首那些「模型爱加但不是内容」的装饰：短横线、星号、圆点、数字编号、
+# markdown 加粗符号、引号。剥干净了才认得出 [事实]/[猜测]。
+_PREFIX_NOISE = re.compile(
+    r"^(?:"
+    r"[-*•·]\s+"          # "- " "* " "• " "· "
+    r"|\d+[.、)]\s*"      # "1. " "2、" "3) "
+    r"|[>#]+\s*"          # 引用 / 标题符号
+    r"|\*\*"              # markdown 加粗开头
+    r")+"
+)
+
+# 标签本身可能写成 [事实] 【事实】 [ 事实 ] **[事实]**
+_TAG = re.compile(r"^[\[【]\s*(事实|猜测)\s*[\]】]\s*[:：]?\s*")
+
+
 def parse_reply(reply):
     """
     解析模型的回答，提取 [事实]/[猜测] 条目。
+
+    容错：
+    - 行首装饰（- * • 1. ** > #）一律剥掉
+    - 标签全角/半角都认（[事实] 【事实】）
+    - 标签后紧跟的冒号（中英文）一并去掉
 
     参数：
         reply : 模型的回答文本
@@ -12,26 +34,32 @@ def parse_reply(reply):
     """
     items = []
 
-    for line in reply.split("\n"):
-        line = line.strip()
+    for raw_line in reply.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            continue
 
-        # 容错：剥掉行首可能的 "- " 或 "* " 或 "• "（模型可能照抄示例格式）
-        for mark in ("- ", "* ", "• "):
-            if line.startswith(mark):
-                line = line[len(mark):]
+        # 反复剥：有的模型会写成 "1. - [事实] xxx" 这种叠了两层装饰的
+        for _ in range(3):
+            stripped = _PREFIX_NOISE.sub("", line)
+            if stripped == line:
                 break
+            line = stripped
 
-        if line.startswith("[事实]"):
-            text = line.replace("[事实]", "", 1).strip()
-            if text:
-                items.append({"text": text, "source": "user_said"})
+        m = _TAG.match(line)
+        if not m:
+            continue
 
-        elif line.startswith("[猜测]"):
-            text = line.replace("[猜测]", "", 1).strip()
-            if text:
-                items.append({"text": text, "source": "her_inference"})
+        tag = m.group(1)
+        text = line[m.end():].strip()
 
-        # 其他行（没有前缀的）→ 丢弃（防止模型乱写）
+        # 尾巴上的加粗符号也去掉（** 成对出现时）
+        text = text.strip("*").strip()
+        if not text:
+            continue
+
+        source = "user_said" if tag == "事实" else "her_inference"
+        items.append({"text": text, "source": source})
 
     return items
 

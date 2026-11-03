@@ -24,7 +24,7 @@ while True:
 
     # —— 验证机制：如果上一轮问过，先判断用户回答 ——
     if pending_verify is not None:
-        feedback = judge_feedback(user_input, llm)
+        feedback = judge_feedback(llm, user_input)
         if feedback == "confirm":
             cog.update_confidence(pending_verify, 0.9, reason="验证确认")
             print("（后台：验证确认，置信度提升）")

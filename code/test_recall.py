@@ -72,3 +72,74 @@ def test_semantic_recall_none():
 
     result = semantic_recall(fake_none, items, "随便聊聊")
     assert result == []
+
+
+# ===== 新增：semantic_recall 的解析容错 =====
+
+def test_semantic_recall_fullwidth_comma():
+    """全角逗号不能导致整批相关记忆被静默丢弃（等于这次召回啥也没捞到）。"""
+    from recall import semantic_recall
+
+    items = [make_item("他叫南风", "user_said", 0.9),
+             make_item("他爱吃辣", "user_said", 0.9)]
+
+    result = semantic_recall(lambda p: "0，1", items, "今天吃啥")
+    assert [m["text"] for m in result] == ["他叫南风", "他爱吃辣"]
+
+
+def test_semantic_recall_with_extra_text():
+    from recall import semantic_recall
+
+    items = [make_item("他爱吃辣", "user_said", 0.9)]
+    result = semantic_recall(lambda p: "相关的编号：0", items, "今天吃啥")
+    assert len(result) == 1
+
+
+def test_semantic_recall_excludes_deleted():
+    """已失效的记忆不该被召回（墓碑过滤）。"""
+    from recall import semantic_recall
+
+    alive = make_item("他叫南风", "user_said", 0.9)
+    dead = make_item("他叫小鱼", "user_said", 0.9)
+    dead["deleted"] = True
+
+    result = semantic_recall(lambda p: "0", [alive, dead], "你叫什么")
+    assert [m["text"] for m in result] == ["他叫南风"]
+
+
+# ===== 新增：format_recall_block 的格式 =====
+
+def test_format_recall_block_structure():
+    """事实区/猜测区要真的分开，且括号不能错配。
+
+    旧实现开头写「（」、结尾补「）」，中间还内嵌一对括号，
+    喂给模型的提示词结构是乱的，会削弱「哪个能当真」的分区感。
+    """
+    from recall import format_recall_block
+
+    block = format_recall_block([
+        make_item("他叫南风", "user_said", 0.9),
+        make_item("他可能爱熬夜", "her_inference", 0.5),
+    ])
+
+    assert "关于他的事实" in block
+    assert "你的猜测" in block
+    assert block.count("（") == block.count("）")   # 括号必须配对
+
+
+def test_format_recall_block_fact_requires_high_confidence():
+    """低置信度的说法不能进「可以当真」的事实区。"""
+    from recall import format_recall_block
+
+    block = format_recall_block([make_item("他好像爱吃辣", "user_said", 0.5)])
+    assert "关于他的事实" not in block
+
+
+def test_format_recall_block_excludes_about_self():
+    """关于 AI 自己的事（about_self）不进事实区，避免把 AI 的话当用户的事实。"""
+    from recall import format_recall_block
+
+    block = format_recall_block([
+        make_item("我说了难听的话", "user_said", 0.9, subject="about_self")
+    ])
+    assert block == ""

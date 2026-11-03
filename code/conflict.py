@@ -1,5 +1,7 @@
 # conflict.py —— 检测新记忆与旧记忆的冲突（反证）
 
+import re
+
 def find_conflicts(llm, new_text, items):
     """
     用模型判断：new_text 和 items 里哪些「语义冲突」（如「爱吃辣」vs「不吃辣了」）。
@@ -36,12 +38,14 @@ def find_conflicts(llm, new_text, items):
     if reply == "无" or reply == "":
         return []
 
+    # 不能只 split(",") 后判 isdigit —— 模型一旦输出全角逗号（0，1）、
+    # 顿号（0、1）或带一句说明（"冲突的编号: 0"），每个片段都不是纯数字，
+    # 整批冲突会被静默丢弃：旧记忆不标失效，继续当事实使用 → 「乱记」。
+    # 改成用正则把回复里所有独立数字抓出来，分隔符是什么都无所谓。
     ids = []
-    for part in reply.split(","):
-        part = part.strip()
-        if part.isdigit():
-            idx = int(part)
-            if 0 <= idx < len(items):
-                ids.append(idx)
+    for token in re.findall(r"\d+", reply):
+        idx = int(token)
+        if 0 <= idx < len(items) and idx not in ids:
+            ids.append(idx)
 
     return [items[i] for i in ids]

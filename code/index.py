@@ -213,7 +213,10 @@ class Cognition:
             if m.get("text") == item.get("text") and m.get("created_at") == item.get("created_at"):
                 m["confidence"] = max(0.0, min(1.0, new_confidence))
                 if reason:
-                    m["deleted_reason"] = reason
+                    # 不能写 deleted_reason —— 那是墓碑字段，专记「为什么失效」。
+                    # 一条仍然有效的记忆挂上「验证确认」，语义就脏了（也骗过按
+                    # deleted_reason 判断状态的代码）。置信度变动记在独立字段。
+                    m["confidence_reason"] = reason
                 break
         save_items(items, self.path)
         return item

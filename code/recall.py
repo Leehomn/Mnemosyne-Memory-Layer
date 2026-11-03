@@ -1,5 +1,7 @@
 # recall.py —— 召回
 
+import re
+
 from decay import decayed_weight, days_since, effective_half_life
 
 
@@ -78,7 +80,7 @@ def format_recall_block(items):
     parts = []
     if facts:
         lines = "\n".join(f"- {m['text']}" for m in facts)
-        parts.append(f"（关于他的事实（他说过的，可以当真）：\n{lines}")
+        parts.append(f"关于他的事实（他说过的，可以当真）：\n{lines}")
 
     if guesses:
         lines = "\n".join(f"- {m['text']}" for m in guesses)
@@ -87,7 +89,9 @@ def format_recall_block(items):
     if not parts:
         return ""
 
-    return "\n\n".join(parts) + "\n\n用法：聊到相关再说，别主动复述。）"
+    # 原来开头是「（」、结尾补「）」又内嵌一对「（）」，括号是错配的。
+    # 这段是要直接喂给模型的提示词，格式乱会削弱「事实/猜测」的分区感。
+    return "\n\n".join(parts) + "\n\n用法：聊到相关再说，别主动复述。"
 
 def semantic_recall(llm, items, query):
     """
@@ -140,12 +144,12 @@ def semantic_recall(llm, items, query):
     if reply == "无" or reply == "":
         return []
 
+    # 同 conflict.py：只认半角逗号 + 纯数字的话，模型输出全角逗号、
+    # 顿号或带一句说明时整批相关性会被丢弃，等于这次召回什么都没捞到。
     ids = []
-    for part in reply.split(","):
-        part = part.strip()
-        if part.isdigit():
-            idx = int(part)
-            if 0 <= idx < len(items):
-                ids.append(idx)
+    for token in re.findall(r"\d+", reply):
+        idx = int(token)
+        if 0 <= idx < len(items) and idx not in ids:
+            ids.append(idx)
 
     return [items[i] for i in ids]
