@@ -9,10 +9,10 @@
 
 ## 状态
 
-**核心机制已实现，可运行。** 7 个模块齐全，`pytest` 测试全部通过，已接入真实模型。
+**核心机制已实现，可运行。** 10 个模块齐全，`pytest` 测试 84 条全部通过，已接入真实模型。
 
 - 代码：`code/` 目录
-- 测试：`code/test_*.py`，运行 `python -m pytest` 全绿
+- 测试：`code/test_*.py`（10 份），运行 `python -m pytest` 全绿
 - 版本管理：Git（仓库根在当前目录，分支 `master`）
 
 ---
@@ -38,10 +38,15 @@
 | 来源监控 | 事实/猜测物理隔离，`subject` 字段区分「关于谁」 | `source.py` |
 | 合并增强 | 相似记忆 → `occurrences+1` + 价值重估（只升不降） | `index.py` |
 | 晋升 | state（动态表现）反复出现 ≥3 次 → trait（稳定内核，半衰期 60→3650 天） | `item.py` / `index.py` |
-| 夜间整合 | consolidate，事件 → 印象 | `reconstruct.py` |
-| 语义召回 | semantic_recall，用模型判断相关性 | `recall.py` |
+| 夜间整合 | consolidate，事件 → 印象（`digested` 记账防重复归纳） | `reconstruct.py` / `index.py` |
+| 语义召回 | semantic_recall，用模型判断相关性（含时间远近、反义/过时识别） | `recall.py` |
+| **冲突检测** | find_conflicts，新记忆推翻旧记忆时自动识别 | `conflict.py` |
+| **软删除 + 墓碑** | 被推翻的记忆标 `deleted` 而不真删，可追溯、可恢复 | `item.py` / `recall.py` / `index.py` |
+| **验证机制** | 两层触发：有不确定印象（规则）+ 用户敞开心扉（模型） | `verify.py` |
 
-**7 个模块**：`decay` / `item` / `store` / `recall` / `source` / `reconstruct` / `index`
+**10 个模块**：`decay` / `item` / `store` / `recall` / `source` / `reconstruct` / `conflict` / `verify` / `llm` / `index`
+
+> 注：`llm.py` 是模型接入层（不参与记忆逻辑）；`conflict.py` / `verify.py` 是「记忆修正」的被动与主动两半。
 
 ---
 
@@ -105,7 +110,9 @@ python -m pytest
 cd code
 python demo_1.py                 # 无模型：一条记忆的一生
 python demo_semantic_recall.py   # 真模型：语义召回（需先填 key）
+python demo_llm_verify.py        # 真模型：验证机制
 python chat-loop.py              # 真模型：端到端（需先填 key）
+python chat_demo.py              # 真模型：交互式对话（双通道 + 验证，需先填 key）
 ```
 
 ---
@@ -120,11 +127,28 @@ from llm import make_deepseek_llm
 cog = Cognition(data_dir="data")
 cog.remember("我叫南风", source="user_said")
 block = cog.recall_block(limit=8)   # 按权重召回
+cog.maintain()                      # 维护：淘汰过期记忆
 
-# 接真模型（支持语义召回）
+# 接真模型（开放语义能力）
 cog = Cognition(data_dir="data", llm=make_deepseek_llm())
 block = cog.semantic_recall_block("我下周去面试")  # 语义召回
-cog.maintain()   # 维护：淘汰过期记忆
+cog.consolidate()                   # 夜间整合：事件 → 印象
+```
+
+**记忆修正的两半：**
+
+```python
+from conflict import find_conflicts       # 被动：新信息推翻旧信息
+from verify import find_uncertain_impressions, should_ask_now, judge_feedback, pick_verify_target
+
+# 被动修正：remember 时自动调用 find_conflicts，冲突的旧记忆标墓碑
+cog.remember("我不吃辣了", source="user_said")   # 旧记忆「他爱吃辣」自动标失效
+
+# 主动修正：验证机制（在对话流里自然求证）
+items = cog._all_items()
+target, should_ask = pick_verify_target(llm, items, user_input)
+# 用户回答后用 judge_feedback 判断 confirm / deny / unrelated
+cog.update_confidence(target, 0.9, reason="验证确认")
 ```
 
 ---
@@ -159,9 +183,30 @@ cog.maintain()   # 维护：淘汰过期记忆
 ## 环境说明
 
 - **Python**：`python` = 3.13.15（`D:\python313`），pytest 装在这里
-- **跑测试**：在 `code/` 目录下 `python -m pytest`
+- **跑测试**：在 `code/` 目录下 `python -m pytest`（84 passed）
+- **依赖**：只有 `openai`（调 DeepSeek 用）；不接模型时纯标准库
 - **Git**：仓库在项目根目录，提交历史见 `git log`（部分 shell 里 `git.exe` 不在 PATH，需在 PyCharm 终端或配好 PATH 后使用）
 - **Python 环境待统一**：本机有 3.13（D 盘）和 3.14（AppData）两个 Python，建议找时间统一，避免依赖混乱
+
+---
+
+## 已知局限（诚实清单）
+
+| 局限 | 说明 | 缓解 |
+|---|---|---|
+| 去重用 Jaccard 按字拆分 | 看不出「爱吃辣 / 讨厌辣」的反义 | 语义召回用模型判断，已部分缓解 |
+| 验证机制少在真实对话里自然触发 | 需要有 `her_inference` 候选 + 用户敞开心扉 | 已放宽触发条件，但仍需更多真实对话打磨 |
+| 猜测会「过度推断」 | 从单次临时状态推出稳定特质 | 提示词待加强约束（见设计定稿 7.7c） |
+| 没有模糊联想 | 只有精确召回，靠模型判断相关性 | 「进阶的灵气」，暂不做 |
+
+---
+
+## 工程收尾（未完成）
+
+- [ ] `LICENSE`（开源协议）
+- [ ] `requirements.txt`
+- [ ] `pack.ps1` 仍是早期 Node 时代的打包脚本，只打文档、不含 `code/`
+- [ ] `package.json` 是 Node 时代残留（指向不存在的 `src/index.mjs`），可删
 
 ---
 
