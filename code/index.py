@@ -3,6 +3,7 @@
 from item import make_item, is_valid
 from store import save_items, load_items
 from recall import recall, format_recall_block, semantic_recall
+from source import default_confidence
 
 
 def jaccard(text1, text2):
@@ -36,7 +37,11 @@ class Cognition:
         self.path = data_dir.rstrip("/") + "/items.json"
         self.llm = llm
 
-    def remember(self, text, source, confidence=0.9, **kwargs):
+    def remember(self, text, source, confidence=None, **kwargs):
+        # 不传置信度 → 按来源自动取（user_said 0.9 / observed 0.8 /
+        # third_party 0.5 / her_inference 0.4）。猜的东西不能和「他说的」同分。
+        if confidence is None:
+            confidence = default_confidence(source)
         item = make_item(text, source, confidence, **kwargs)
         if not is_valid(item):
             return None
@@ -53,12 +58,17 @@ class Cognition:
         # 重新读库（因为 mark_deleted 已经改过库）
         items = load_items(self.path)
 
-        # 找相似的旧记忆
+        # 找相似的旧记忆（只有「关于同一个人」的才能合并：
+        # 「我」的事和「他」的事，哪怕字面一样也不是一条）
         for old in items:
-            if old.get("text") == item["text"] or \
-                    jaccard(old.get("text", ""), item["text"]) >= 0.5:
+            same_subject = (old.get("subject", "about_user")
+                            == item.get("subject", "about_user"))
+            if same_subject and (old.get("text") == item["text"] or
+                                 jaccard(old.get("text", ""), item["text"]) >= 0.5):
                 # —— 增强：出现次数 +1 ——
                 old["occurrences"] = old.get("occurrences", 1) + 1
+                # —— 用进废退：被想起的次数 +1（decay.py 靠它拉长半衰期）——
+                old["hits"] = old.get("hits", 0) + 1
 
                 # —— 价值重估：取更高（只升不降）——
                 if confidence > old.get("confidence", 0):
@@ -166,8 +176,9 @@ class Cognition:
 
         items = load_items(self.path)
 
-        # 1. 筛选出所有 episode（事件）
-        episodes = [m for m in items if m.get("layer") == "episode"]
+        # 1. 筛选出「还没被消化过」的 episode（事件）
+        episodes = [m for m in items
+                    if m.get("layer") == "episode" and not m.get("digested")]
 
         if not episodes:
             return 0
@@ -177,7 +188,17 @@ class Cognition:
             return 0
 
         # 3. 调 reconstruct 里的 consolidate，用 self.remember 写入
-        added = _consolidate(self.llm, episodes, self.remember)
+        added = _consolidate(self.llm, episodes, self.remember, kind="state")
+
+        # 4. 记账：这批事件已消化，下次不再重复归纳。
+        #    否则同一批事件每晚会「重复出现」一次，把一条印象顶成永久的 trait。
+        items = load_items(self.path)
+        done = {(m.get("text"), m.get("created_at")) for m in episodes}
+        for m in items:
+            if (m.get("text"), m.get("created_at")) in done:
+                m["digested"] = True
+        save_items(items, self.path)
+
         return added
 
     def update_confidence(self, item, new_confidence, reason=None):

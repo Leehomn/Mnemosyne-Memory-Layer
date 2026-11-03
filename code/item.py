@@ -53,6 +53,7 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         "deleted": False,            # 是否已失效（墓碑）
         "deleted_reason": None,      # 为什么失效（如「被用户纠正」）
         "superseded_by": None,       # 被哪条新记忆推翻
+        "digested": False,           # 事件是否已被夜间整合「消化」过
     }
     return item
 

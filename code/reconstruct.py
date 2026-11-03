@@ -82,7 +82,7 @@ def reconstruct(llm, buffer, remember_func):
 
     return added
 
-def consolidate(llm, episodes, remember_func):
+def consolidate(llm, episodes, remember_func, kind="state"):
     """
     夜间整合：把一堆事件（episode）归纳成印象（impression）。
 
@@ -93,6 +93,9 @@ def consolidate(llm, episodes, remember_func):
         llm           : 模型函数
         episodes      : 事件列表（layer=episode 的记忆）
         remember_func : 写记忆的函数
+        kind          : 印象类型，默认 state（动态表现）——
+                        归纳出来的是「近期反复出现的规律」，还不够格算稳定内核；
+                        等它自己被反复确认到第 3 次，才由晋升机制改成 trait
 
     返回：
         新增的印象条数
@@ -131,6 +134,7 @@ def consolidate(llm, episodes, remember_func):
             it["text"],
             source=source,
             layer="impression",
+            kind=kind,
         )
         if result is not None:
             added += 1
