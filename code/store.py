@@ -57,6 +57,9 @@ def backup_file(path):
 
     返回：
         备份后的文件路径；如果原文件不存在，返回 None
+
+    注意（2026-11-04）：当前项目还没投入应用，数据无价值，
+    备份暂不启用——没有入口调用本函数，仅留作将来投入应用时使用。
     """
     if not os.path.exists(path):
         return None

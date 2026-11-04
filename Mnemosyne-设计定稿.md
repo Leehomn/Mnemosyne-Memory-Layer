@@ -7,7 +7,7 @@
 > - 第一部分「思想与机制」——记录**为什么**这么设计（给人看）
 > - 第二部分「技术规格」——记录**怎么**实现（给代码看）
 >
-> 状态：思想层已定稿，技术层已同步至实际代码（2026-11-03：10 模块 / 84 测试）。
+> 状态：思想层已定稿，技术层已同步至实际代码（2026-11-04：10 模块 / 86 测试）。
 >
 > **技术选型（2026-10-25 定）**：本项目用 **Python** 实现（原方案文档中的 Node.js/`.mjs` 仅为原作者的环境选择，非项目约束）。理由：① 开发者正在学 Python，学以致用；② Python 是 AI/科研/「化学+AI」方向的主流语言；③ 大模型 SDK 生态 Python 最成熟。
 
@@ -432,6 +432,7 @@
 - **学术对照**：SM-2 的「失败重置」——复习失败时，间隔从头再来。
 - **意义**：让记忆从「只会越来越牢」升级成「有进有退」的动态平衡。
 - **触发信号（关键）**：`after_review_fail` 必须有真实信号触发（用户纠正 / 记忆冲突 / 检索失败），不能凭空发生（呼应「不能为了模拟人脑而模拟人脑」）。
+- **当前状态（2026-11-04）**：`after_review_fail` 尚未接入任何入口——「检索失败」这个触发场景还没做，而「用户纠正/记忆冲突」走的是墓碑（`mark_deleted`）、验证否认走的是降置信度，语义都与「复习失败」不同，不能硬接。函数保留（有测试守着），等间隔重复复习功能落地再接。
 
 #### 4.4.8b 软删除 + 墓碑：记忆被推翻时的「反证修正」（2026-11-02 落地）
 
@@ -587,7 +588,7 @@ cognition-memory/
 │   ├── demo_semantic_recall.py  # 语义召回演示
 │   ├── demo_llm_verify.py    # 验证机制演示
 │   ├── config.json           # API key 配置（不写死在代码里，开源时排除）
-│   ├── test_*.py             # ✅ 测试（10 份，84 条）
+│   ├── test_*.py             # ✅ 测试（10 份，86 条）
 │   └── data/                 # items.json（运行时生成，不进版本库）
 
 # 待实现：
@@ -607,7 +608,7 @@ cognition-memory/
   2. `semantic_recall_block` 语义召回相关记忆
   3. `pick_verify_target` 综合判断「该不该问、问哪一条」
   4. 拼提示词（把人设 + 记忆 + 求证指令合在一起）→ 模型回复
-  5. 该轮进 buffer，退出时 `reconstruct` 固化
+  5. 该轮进 buffer，退出时 `reconstruct` 固化 + `consolidate` 夜间整合（把事件归纳成印象）
 - **意义**：这两个示例标志着**项目「从 0 到 1」完整闭环**——所有机制真正串在一起跑。
 
 ### 7.5 核心接口（Cognition 类，持续更新至 2026-11-03）
@@ -617,7 +618,7 @@ cognition-memory/
 | `remember(text, source, confidence, ...)` | 记一条 | 创建 → 校验 → **冲突检测** → 去重（相似→增强+晋升）→ 存盘 |
 | `recall_block(limit=8)` | 召回并格式化 | 读盘 → 按权重排序 → 事实/猜测分区 |
 | `semantic_recall_block(query, limit=8)` | **语义召回** | 用模型判断相关性（含时间、反义/过时识别）→ 只召回相关的 |
-| `maintain()` | 维护/淘汰 | 算权重 → 淘汰低于阈值的 → 存回 |
+| `maintain()` | 维护/淘汰 | 算权重 → 衰减到阈值的**软删除**（标墓碑）→ 躺超 90 天的墓碑真空清理 → 存回 |
 | `consolidate()` | **夜间整合**（11-01） | 自动读 episode → 用模型归纳成 impression → 标 `digested` 防重复 |
 | `mark_deleted(old, reason, ...)` | **标记失效**（11-02） | 软删除：标 deleted，不物理删除 |
 | `update_confidence(item, conf, reason)` | **更新置信度**（11-02） | 验证确认→升，否认→降；变动理由记 `confidence_reason` |
@@ -661,10 +662,10 @@ cognition-memory/
   |---|---|---|
   | `user_said` | 0.9 | 证实 |
   | `observed` | 0.8 | 证实 |
-  | `third_party` | 0.5 | 证实 |
+  | `third_party` | 0.5 | **转述（非证实）** |
   | `her_inference` | 0.4 | **猜测** |
 
-- **接口**：`default_confidence(source)` 查表；`is_confirmed(source)` 判断证实/猜测。
+- **接口**：`default_confidence(source)` 查表；`is_confirmed(source)` 判断证实/猜测（**只认 user_said / observed，third_party 不算证实**——别人转述可能失真，呼应 5.1「禁止算到对话对象头上」）。事实区判断（`recall.py`）统一走 `is_confirmed`，不再各自硬编码来源元组。
 
 ### 7.7 事后重构（reconstruct.py，2026-10-31 实现，已接入真模型）
 
@@ -747,7 +748,7 @@ cognition-memory/
 
 ### 10.1 测试现状
 
-**84 条测试，10 份测试文件，全绿（0.1 秒）。**
+**86 条测试，10 份测试文件，全绿（0.1 秒）。**
 
 | 测试文件 | 条数 | 覆盖 |
 |---|---|---|
@@ -759,7 +760,7 @@ cognition-memory/
 | `test_reconstruct.py` | 10 | `parse_reply` 各种装饰容错、consolidate |
 | `test_conflict.py` | 10 | 冲突检测、编号解析、无 item 不白调模型 |
 | `test_verify.py` | 14 | 四个函数全覆盖（judge_feedback 6 条、pick_verify_target 2 条） |
-| `test_index.py` | 15 | `Cognition` 各方法、合并增强、晋升、墓碑 |
+| `test_index.py` | 17 | `Cognition` 各方法、合并增强、晋升、墓碑、软删除/真空清理 |
 | `test_consolidate.py` | **1** | 夜间整合（**覆盖薄弱，待补**） |
 
 > **已知薄弱点**：`test_consolidate.py` 只有 1 条，而夜间整合是「事件 → 印象」的关键一步，且用真模型时会调两次（整合 + 记账）。后续应补：① `digested` 防重复的端到端验证 ② 真模型返回空/格式异常时的行为 ③ `kind` 参数生效验证。
