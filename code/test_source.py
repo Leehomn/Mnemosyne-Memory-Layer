@@ -20,7 +20,7 @@ def test_is_confirmed_true_for_verified_sources():
     # 证实：用户说的 / 观察到的 / 第三方
     assert is_confirmed("user_said") is True
     assert is_confirmed("observed") is True
-    assert is_confirmed("third_party") is True
+    assert is_confirmed("third_party") is False
 
 
 def test_is_confirmed_false_for_inference_and_unknown():

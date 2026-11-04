@@ -30,7 +30,7 @@ def is_confirmed(source):
         source : 来源
 
     返回：
-        True  → 证实（user_said / observed / third_party）
+        True  → 证实（user_said / observed ）
         False → 猜测（her_inference 或未知）
     """
-    return source in ("user_said", "observed", "third_party")
+    return source in ("user_said", "observed")
