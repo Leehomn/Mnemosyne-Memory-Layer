@@ -95,6 +95,12 @@ def after_review_fail(base_half_life, confidence, reset_ratio=0.5):
 
     返回：
         (新的半衰期, 新的置信度)
+
+    注意（2026-11-04）：本函数对应「间隔重复」的「复习失败」那一半，
+    目前还没有接入任何入口——因为它的触发信号（「检索失败」，即系统主动
+    问用户「还记不记得」、用户答不上来）这个功能还没做。冲突检测/验证
+    否认走的是「墓碑」（mark_deleted）和「降置信度」，语义与「复习失败」
+    不同，不能硬接。等间隔重复复习功能落地后再接这里。
     """
     new_half_life = base_half_life * reset_ratio
     new_confidence = confidence * reset_ratio

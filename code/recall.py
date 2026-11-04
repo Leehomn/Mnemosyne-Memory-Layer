@@ -5,21 +5,6 @@ import re
 from decay import decayed_weight, days_since, effective_half_life
 
 
-def recall_by_hits(items, limit=8):
-    """
-    按「被想起次数 hits」从高到低，挑出前 limit 条。
-
-    参数：
-        items : 记忆列表
-        limit : 最多返回几条
-
-    返回：
-        排序后的前 limit 条
-    """
-    sorted_items = sorted(items, key=lambda x: x.get("hits", 0), reverse=True)
-    return sorted_items[:limit]
-
-
 def recall(items, limit=8, now=None):
     """
     按「权重」从高到低，挑出最重要的前 limit 条。
