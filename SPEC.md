@@ -234,7 +234,7 @@ def semantic_recall(llm, items, query)  # 用模型判断相关性
 | 参数 | 默认值 | 位置 |
 |---|---|---|
 | `forget_below` | 0.12 | `decay.py:should_forget` |
-| `review_boost` | 0.5 | `decay.py:effective_half_life` |
+| `review_boost` | 0.5 | `decay.py:effective_half_life`（对数：`×(1+review_boost×log(1+hits))`） |
 | `boost_k` | 1.0 | `decay.py:decayed_weight` |
 | `reset_ratio` | 0.5 | `decay.py:after_review_fail` |
 | Jaccard 合并阈值 | 0.5 | `index.py:remember` |

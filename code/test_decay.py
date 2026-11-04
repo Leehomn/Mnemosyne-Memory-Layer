@@ -18,8 +18,19 @@ def test_use_boost_makes_recalled_heavier():
 
 
 def test_review_lengthens_half_life():
-    # 复习让半衰期变长
-    assert effective_half_life(14, 3) == 35.0
+    # 复习让半衰期变长（对数增长：前面快，后面慢）
+    # 14 天、被想起 3 次 → 14 × (1 + 0.5 × ln(1+3)) ≈ 23.7 天
+    expected = round(14 * (1 + 0.5 * math.log(1 + 3)), 6)
+    assert round(effective_half_life(14, 3), 6) == expected
+
+
+def test_review_half_life_growth_slows_down():
+    # 半衰期增长也要「前面快、后面慢」（对数），而不是线性无上限
+    # 1→2 次的增幅，应远大于 100→101 次的增幅
+    base = 14
+    rise_1_2 = effective_half_life(base, 2) - effective_half_life(base, 1)
+    rise_100_101 = effective_half_life(base, 101) - effective_half_life(base, 100)
+    assert rise_1_2 > rise_100_101 * 20
 
 
 def test_should_forget_threshold():

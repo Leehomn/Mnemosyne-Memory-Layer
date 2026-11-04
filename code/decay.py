@@ -35,12 +35,16 @@ def effective_half_life(base_half_life, hits, review_boost=0.5):
     参数：
         base_half_life : 基础半衰期（多少天忘一半）
         hits           : 被复习（想起）的次数
-        review_boost   : 每复习一次，半衰期增长的比例（默认 0.5 = +50%）
+        review_boost   : 复习增益系数（默认 0.5）
 
     返回：
         变长后的半衰期（天）
+
+    用对数增长：前面涨得快，后面越来越慢，和 decayed_weight 的 use_boost
+    一致。这样「被想起很多次」不会让半衰期线性无上限地膨胀（记忆永生），
+    而是越涨越慢、趋近一个上限——像人对「被提起了好多次」的对数感知。
     """
-    return base_half_life * (1 + review_boost * hits)
+    return base_half_life * (1 + review_boost * math.log(1 + hits))
 
 
 def decayed_weight(base_weight, half_life, hits, confidence, age_days,
