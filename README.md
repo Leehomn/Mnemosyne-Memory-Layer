@@ -204,9 +204,6 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 ## 工程收尾（未完成）
 
 - [ ] `LICENSE`（开源协议）
-- [ ] `requirements.txt`
-- [ ] `pack.ps1` 仍是早期 Node 时代的打包脚本，只打文档、不含 `code/`
-- [ ] `package.json` 是 Node 时代残留（指向不存在的 `src/index.mjs`），可删
 
 ---
 
