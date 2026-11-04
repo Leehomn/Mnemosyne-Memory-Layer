@@ -325,3 +325,36 @@ def test_maintain_vacuums_old_tombstone(tmp_path):
     texts = [m["text"] for m in left]
     assert "一条早该清掉的墓碑" not in texts     # 躺太久，被物理删
     assert "一条刚过期的墓碑" in texts          # 还没到清理时间，留着
+
+def test_digested_episode_not_merged(tmp_path):
+    """已被夜间整合消化过的 episode，不再参与去重合并。
+
+    否则「第二遍说相似的话」会被吞进一条已经 digested 的旧事件里，
+    夜里归纳再也看不见它，晋升证据（occurrences）永远到不了 3。
+    """
+    from index import Cognition
+
+    def fake_llm(prompt):
+        # 冲突检测不判冲突，避免干扰
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 第 1 天：说「找工作挺累的」，夜里整合后它变成 digested
+    cog.remember("找工作挺累的", source="user_said", layer="episode")
+    items = load_items(cog.path)
+    items[0]["digested"] = True
+    save_items(items, cog.path)
+
+    # 第 2 天：又说几乎一样的话「找工作好累啊」
+    # 因为旧的那条已经 digested，不该被合并，应该记成一条新 episode
+    result = cog.remember("找工作好累啊", source="user_said", layer="episode")
+
+    # 关键断言：新话没有被吞进旧条目，而是独立成了一条
+    items = load_items(cog.path)
+    assert len(items) == 2
+    # 新那条的 occurrences 应该是 1（没被合并撑大）
+    assert result["occurrences"] == 1
+    # 旧那条的 occurrences 应该还是 1（没吃到新话）
+    old = [m for m in items if m["text"] == "找工作挺累的"][0]
+    assert old["occurrences"] == 1

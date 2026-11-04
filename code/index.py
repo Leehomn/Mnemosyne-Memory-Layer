@@ -74,12 +74,14 @@ class Cognition:
                 continue
             same_subject = (old.get("subject", "about_user")
                             == item.get("subject", "about_user"))
+            # 已被夜间整合消化过的 episode 不再参与去重合并：
+            # 否则「第二遍说相似的话」会被吞进一条已经 digested 的旧事件里，
+            # 夜里归纳再也看不见它，晋升证据（occurrences）永远到不了 3。
+            if (old.get("digested") and old.get("layer") == "episode"):
+                continue
             if same_subject and (old.get("text") == item["text"] or
                                  jaccard(old.get("text", ""), item["text"]) >= 0.5):
                 # —— 增强：出现次数 +1 ——
-                # 「又说了几乎一样的话」是「出现次数」该管的事，不是「被想起」。
-                # hits（被想起次数）由语义召回负责 +1，这里不能碰，否则「用户重说」
-                # 和「AI 想起」两件事被混成一件，晋升与用进废退的计数就都错了。
                 old["occurrences"] = old.get("occurrences", 1) + 1
 
                 # —— 价值重估：取更高（只升不降）——
