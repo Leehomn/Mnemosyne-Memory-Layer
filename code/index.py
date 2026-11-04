@@ -1,9 +1,15 @@
 # index.py —— 对外统一入口（Cognition 类）
 
+import time
+
 from item import make_item, is_valid
 from store import save_items, load_items
 from recall import recall, format_recall_block, semantic_recall
 from source import default_confidence
+
+# 墓碑（软删除）在库里最多躺多少天，之后被真空清理（物理删除）。
+# 软删除保证「刚过期的还能找回」，真空清理保证「死人不会越堆越多」。
+TOMBSTONE_RETENTION_DAYS = 90
 
 
 def jaccard(text1, text2):
@@ -61,6 +67,11 @@ class Cognition:
         # 找相似的旧记忆（只有「关于同一个人」的才能合并：
         # 「我」的事和「他」的事，哪怕字面一样也不是一条）
         for old in items:
+            # 墓碑（deleted）不是活记忆，不能拿来做去重合并：
+            # 否则用户改口说回一条已被推翻的话，新话会被吞进死记录里，
+            # 召回时又被过滤掉，等于白说。墓碑只能被「复活」机制单独处理。
+            if old.get("deleted"):
+                continue
             same_subject = (old.get("subject", "about_user")
                             == item.get("subject", "about_user"))
             if same_subject and (old.get("text") == item["text"] or
@@ -123,14 +134,34 @@ class Cognition:
 
     def maintain(self):
         """
-        维护：淘汰权重低于遗忘阈值的记忆。
+        维护：淘汰 + 真空清理墓碑。
+
+        1. 衰减到阈值以下的记忆 → 软删除（标墓碑，不物理删）。
+           这样「过期」也不是永久抹掉，符合「宁可漏记，不可乱记」——万一
+           用户又想起它，还能靠复活机制找回。
+        2. 已经躺了超过 TOMBSTONE_RETENTION_DAYS 的墓碑 → 物理删除。
+           防止死人越堆越多，稀释语义召回、白花 token。
+
+        返回：
+            本次软删除（标墓碑）的条数
         """
         from decay import decayed_weight, days_since, should_forget, effective_half_life
 
+        now = time.time()
         items = load_items(self.path)
         kept = []
+        tombstoned = 0
 
         for m in items:
+            # 已经是墓碑的，不参与衰减，只判断要不要真空清理
+            if m.get("deleted"):
+                deleted_at = m.get("deleted_at")
+                if deleted_at is not None and \
+                        (now - deleted_at) / 86400 > TOMBSTONE_RETENTION_DAYS:
+                    continue  # 躺太久，物理删除
+                kept.append(m)
+                continue
+
             age = days_since(m.get("created_at", 0))
             hl = effective_half_life(m.get("half_life", 14), m.get("hits", 0))
             w = decayed_weight(
@@ -141,12 +172,15 @@ class Cognition:
                 age,
             )
             if should_forget(w):
-                continue
+                # 软删除：标墓碑，不物理删
+                m["deleted"] = True
+                m["deleted_reason"] = "衰减过期"
+                m["deleted_at"] = now
+                tombstoned += 1
             kept.append(m)
 
-        removed = len(items) - len(kept)
         save_items(kept, self.path)
-        return removed
+        return tombstoned
 
     def mark_deleted(self, old_item, reason, superseded_by=None):
         """
@@ -161,6 +195,7 @@ class Cognition:
                 m["deleted"] = True
                 m["deleted_reason"] = reason
                 m["superseded_by"] = superseded_by
+                m["deleted_at"] = time.time()
                 break
         save_items(items, self.path)
         return old_item

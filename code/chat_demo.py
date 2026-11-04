@@ -20,6 +20,10 @@ while True:
     if user_input.lower() == "quit":
         if buffer:
             reconstruct(llm, buffer, cog.remember)
+            # 夜间整合：把这一天攒下的事件归纳成印象（让二楼三楼真正出现）
+            added = cog.consolidate()
+            if added:
+                print(f"（后台：夜间整合，归纳出 {added} 条印象）")
         break
 
     # —— 验证机制：如果上一轮问过，先判断用户回答 ——

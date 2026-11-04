@@ -56,9 +56,21 @@ def test_maintain(tmp_path):
     removed = cog.maintain()
     assert removed == 1
 
+    # 软删除：过期的条目不再物理删，而是标墓碑留在库里
     left = load_items(cog.path)
-    assert len(left) == 1
-    assert left[0]["text"] == "一条新记忆"
+    assert len(left) == 2
+
+    # 老的那条被标了墓碑，新的一条还活着
+    old = [m for m in left if m["text"] == "一条很老的记忆"]
+    new = [m for m in left if m["text"] == "一条新记忆"]
+    assert old and old[0]["deleted"] is True
+    assert old[0]["deleted_reason"] == "衰减过期"
+    assert new and new[0]["deleted"] is False
+
+    # 墓碑不会被召回（recall 先过滤 deleted）
+    block = cog.recall_block(limit=8)
+    assert "一条很老的记忆" not in block
+    assert "一条新记忆" in block
 
 
 def test_jaccard():
@@ -225,3 +237,58 @@ def test_consolidate_marks_state_and_digests(tmp_path):
     impression = [m for m in items if m.get("layer") == "impression"]
     assert impression[0]["occurrences"] == 1
     assert impression[0]["kind"] == "state"
+
+
+def test_remember_skips_tombstone(tmp_path):
+    """墓碑不能被去重合并：用户改口说回一条已被推翻的话，新话必须另起一条，
+    而不是被吞进死记录里（否则召回时又被过滤，等于白说）。"""
+    from index import Cognition
+
+    def fake_llm(prompt):
+        # 冲突检测时不判冲突（避免干扰），其余返回无
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 先存「他叫小鱼」
+    cog.remember("他叫小鱼", source="user_said", confidence=0.9)
+
+    # 手动把「他叫小鱼」标成墓碑（模拟被推翻）
+    items = load_items(cog.path)
+    items[0]["deleted"] = True
+    items[0]["deleted_reason"] = "被新信息推翻"
+    save_items(items, cog.path)
+
+    # 用户又改口说「他叫小鱼」——不该被吞进墓碑
+    cog.remember("他叫小鱼", source="user_said", confidence=0.9)
+
+    left = load_items(cog.path)
+    # 应该有一条活「他叫小鱼」+ 一条墓碑「他叫小鱼」
+    alive = [m for m in left if m["text"] == "他叫小鱼" and not m.get("deleted")]
+    assert len(alive) == 1
+    assert alive[0]["deleted"] is False
+
+
+def test_maintain_vacuums_old_tombstone(tmp_path):
+    """墓碑躺太久（超过 TOMBSTONE_RETENTION_DAYS）要被物理清理，防止死人堆满。"""
+    from index import TOMBSTONE_RETENTION_DAYS
+
+    cog = Cognition(data_dir=str(tmp_path))
+    old_tombstone = make_item("一条早该清掉的墓碑", "observed", 0.5)
+    old_tombstone["deleted"] = True
+    old_tombstone["deleted_reason"] = "衰减过期"
+    old_tombstone["deleted_at"] = time.time() - (TOMBSTONE_RETENTION_DAYS + 10) * 86400
+
+    fresh_tombstone = make_item("一条刚过期的墓碑", "observed", 0.5)
+    fresh_tombstone["deleted"] = True
+    fresh_tombstone["deleted_reason"] = "衰减过期"
+    fresh_tombstone["deleted_at"] = time.time() - 5 * 86400
+
+    save_items([old_tombstone, fresh_tombstone], cog.path)
+
+    cog.maintain()
+
+    left = load_items(cog.path)
+    texts = [m["text"] for m in left]
+    assert "一条早该清掉的墓碑" not in texts     # 躺太久，被物理删
+    assert "一条刚过期的墓碑" in texts          # 还没到清理时间，留着
