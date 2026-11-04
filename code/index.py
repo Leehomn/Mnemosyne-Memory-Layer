@@ -77,9 +77,10 @@ class Cognition:
             if same_subject and (old.get("text") == item["text"] or
                                  jaccard(old.get("text", ""), item["text"]) >= 0.5):
                 # —— 增强：出现次数 +1 ——
+                # 「又说了几乎一样的话」是「出现次数」该管的事，不是「被想起」。
+                # hits（被想起次数）由语义召回负责 +1，这里不能碰，否则「用户重说」
+                # 和「AI 想起」两件事被混成一件，晋升与用进废退的计数就都错了。
                 old["occurrences"] = old.get("occurrences", 1) + 1
-                # —— 用进废退：被想起的次数 +1（decay.py 靠它拉长半衰期）——
-                old["hits"] = old.get("hits", 0) + 1
 
                 # —— 价值重估：取更高（只升不降）——
                 if confidence > old.get("confidence", 0):
@@ -121,6 +122,10 @@ class Cognition:
 
         返回：
             格式化文字；没有相关记忆返回 ""
+
+        注意：本方法有「副作用」——被真正召回（想起来用）的记忆，hits +1 并落库。
+        这是「用进废退」的触发点：记忆被想起来就该变强（半衰期拉长、权重提高），
+        而不是靠用户重复说同一句话来触发。
         """
         if self.llm is None:
             # 没传模型，退回普通召回
@@ -130,6 +135,16 @@ class Cognition:
         related = semantic_recall(self.llm, items, query)
         # 再按权重排序取前 limit
         top = recall(related, limit=limit)
+
+        # —— 用进废退：被真正召回的记忆，hits +1 落库 ——
+        # 这里只给「被想起」的记忆 +1，和去重合并里的 occurrences 分开：
+        # occurrences = 出现次数（用户说了几次），决定晋升；
+        # hits       = 被想起次数（AI 主动用了它几次），决定用进废退/半衰期。
+        if top:
+            for m in top:
+                m["hits"] = m.get("hits", 0) + 1
+            save_items(items, self.path)
+
         return format_recall_block(top)
 
     def maintain(self):

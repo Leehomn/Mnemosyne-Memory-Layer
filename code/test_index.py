@@ -201,16 +201,49 @@ def test_verify_finds_the_guess(tmp_path):
     assert found[0]["text"] == "他喜欢安静"
 
 
-def test_hits_grow_when_repeated(tmp_path):
-    """同一条信息被提起第二次，hits 要涨，半衰期要跟着变长。"""
-    from decay import effective_half_life
+def test_repeat_does_not_bump_hits(tmp_path):
+    """用户重复说同一句话：occurrences 涨（出现次数），hits 不涨（没被「想起」）。
 
+    这是「拆开两个计数器」的核心：hits 只该由语义召回（AI 主动想起来用）触发，
+    用户重说算 occurrences，不能混成 hits，否则晋升和用进废退的计数全错。
+    """
     cog = Cognition(data_dir=str(tmp_path))
     cog.remember("我爱吃辣", source="user_said")
     result = cog.remember("我爱吃辣", source="user_said")
 
-    assert result["hits"] == 1
-    assert effective_half_life(result["half_life"], result["hits"]) > result["half_life"]
+    assert result["occurrences"] == 2
+    assert result["hits"] == 0
+
+
+def test_semantic_recall_bumps_hits(tmp_path):
+    """语义召回命中：hits +1（被想起来了），且只 +1 命中的那几条。
+
+    fake_llm 必须区分两种调用：
+    - 冲突检测（提示词含「语义冲突」）→ 回「无」，表示没有冲突；
+    - 语义召回（提示词含「当前这句话」）→ 按用户原话判断命中哪条。
+    否则同一个「0」在冲突检测里会被当成「第 0 条冲突」，把无辜记忆标成墓碑。
+    """
+    def fake_llm(prompt):
+        if "语义冲突" in prompt:
+            return "无"          # 冲突检测：无冲突
+        if "今天吃什么" in prompt:
+            return "0"           # 召回：只命中「我爱吃辣」（第 0 条）
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+    cog.remember("我爱吃辣", source="user_said")
+    cog.remember("我喜欢打篮球", source="user_said")
+
+    cog.semantic_recall_block("今天吃什么", limit=5)
+
+    items = load_items(cog.path)
+    spicy = [m for m in items if m["text"] == "我爱吃辣"]
+    basketball = [m for m in items if m["text"] == "我喜欢打篮球"]
+
+    # 只有「我爱吃辣」被命中，hits 应该 +1
+    assert spicy[0]["hits"] == 1
+    # 「打篮球」没被召回，hits 应该保持 0
+    assert basketball[0]["hits"] == 0
 
 
 def test_consolidate_marks_state_and_digests(tmp_path):
