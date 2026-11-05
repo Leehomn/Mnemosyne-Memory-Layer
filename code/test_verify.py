@@ -57,10 +57,10 @@ def test_find_uncertain_skips_deleted():
 
 
 def test_find_uncertain_confidence_edges():
-    """0.4 和 0.7 是闭区间端点，必须算进去；0.39 和 0.71 必须排除。"""
-    lo_in = make_item("边界下", "her_inference", 0.4)
+    """0.2 和 0.7 是闭区间端点，必须算进去；0.19 和 0.71 必须排除。"""
+    lo_in = make_item("边界下", "her_inference", 0.2)
     hi_in = make_item("边界上", "her_inference", 0.7)
-    too_low = make_item("太低", "her_inference", 0.39)
+    too_low = make_item("太低", "her_inference", 0.19)
     too_high = make_item("太高", "her_inference", 0.71)
 
     texts = [m["text"] for m in find_uncertain_impressions([lo_in, hi_in, too_low, too_high])]
@@ -68,6 +68,20 @@ def test_find_uncertain_confidence_edges():
     assert "边界上" in texts
     assert "太低" not in texts
     assert "太高" not in texts
+
+
+def test_find_uncertain_sorts_high_confidence_first():
+    """依据不足的猜测(0.2)也能进候选，但要排在正常猜测(0.4~0.7)后面。
+
+    这样 0.2 不会永久搁置，也不会抢正常猜测的优先验证权。
+    """
+    low = make_item("依据不足", "her_inference", 0.2)
+    normal = make_item("正常猜测", "her_inference", 0.5)
+    high = make_item("较确定", "her_inference", 0.6)
+
+    result = find_uncertain_impressions([low, normal, high])
+    confs = [m["confidence"] for m in result]
+    assert confs == [0.6, 0.5, 0.2]
 
 
 # ===== 新增：should_ask_now 的否定陷阱（回归测试） =====

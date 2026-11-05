@@ -6,8 +6,10 @@ def find_uncertain_impressions(items):
 
     规则：
     - source 是 her_inference（我猜的）
-    - 置信度中等（0.4 ~ 0.7）
+    - 置信度中等偏低（0.2 ~ 0.7）；0.2 是「依据不足」的猜测，0.4~0.7 是「正常猜测」
     - 没被标记失效（deleted）
+
+    返回顺序：按置信度从高到低排好，正常猜测优先、依据不足猜测殿后。
 
     返回：
         值得验证的印象列表
@@ -19,9 +21,12 @@ def find_uncertain_impressions(items):
         if m.get("source") != "her_inference":
             continue
         conf = m.get("confidence", 0)
-        if not (0.4 <= conf <= 0.7):
+        if not (0.2 <= conf <= 0.7):
             continue
         result.append(m)
+    # 按置信度从高到低排序：0.4~0.7 的「正常猜测」排在前面优先被问，
+    # 0.2 的「依据不足猜测」排在后面，最后才轮到它——既不永久搁置，也不抢正常猜测的优先权。
+    result.sort(key=lambda m: m.get("confidence", 0), reverse=True)
     return result
 
 
