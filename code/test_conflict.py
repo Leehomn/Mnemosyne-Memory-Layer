@@ -75,3 +75,37 @@ def test_all_deleted_skips_llm():
     found = find_conflicts(lambda p: calls.append(p) or "0", "新的话", items)
     assert found == []
     assert calls == []
+
+
+def test_kind_labeled_in_prompt():
+    """提示词必须把旧记忆的 kind 标注出来（trait→长期习惯、state→近期状态），
+    这样模型才能区分「长期偏好 vs 近期状态」、避免误判冲突。"""
+    items = [
+        make_item("他爱吃辣", "user_said", 0.9, layer="impression", kind="trait"),
+        make_item("他最近压力大", "user_said", 0.9, layer="impression", kind="state"),
+    ]
+    seen = []
+
+    def llm(prompt):
+        seen.append(prompt)
+        return "无"
+
+    find_conflicts(llm, "他最近戒辣了", items)
+    prompt = seen[0]
+    assert "长期习惯/嗜好" in prompt
+    assert "近期状态/行为" in prompt
+
+
+def test_state_does_not_overthrow_trait():
+    """「近期状态」不推翻「长期嗜好」：模型看到 kind 标注后应判并存、不冲突。
+
+    这是「宁可漏记不可乱记」的反向护栏——不能把「他最近戒辣」误判成
+    「他从来不爱吃辣」，把一条长期偏好错误标成墓碑。
+    """
+    items = [
+        make_item("他爱吃辣", "user_said", 0.9, layer="impression", kind="trait"),
+    ]
+
+    # 假模型：收到带「长期习惯/嗜好」标注的提示词，判断「他最近戒辣」是状态变化 → 无冲突
+    found = find_conflicts(lambda p: "无", "他最近戒辣了", items)
+    assert found == []
