@@ -119,12 +119,32 @@ def test_format_recall_block_structure():
 
     block = format_recall_block([
         make_item("他叫南风", "user_said", 0.9),
-        make_item("他可能爱熬夜", "her_inference", 0.5),
+        make_item("他可能爱熬夜", "her_inference", 0.6),
     ])
 
     assert "关于他的事实" in block
     assert "你的猜测" in block
     assert block.count("（") == block.count("）")   # 括号必须配对
+
+
+def test_format_recall_block_drops_low_confidence_guesses():
+    """低置信度的猜测（<0.6）不该进猜测区，避免 AI 顺着没把握的猜测乱编。
+
+    这是「降低置信度 → 降低出场机会」的最后一环：
+    之前猜测区只看来源不看置信度，0.4 的初始猜测照样上场。
+    """
+    from recall import format_recall_block
+
+    block = format_recall_block([
+        make_item("他叫南风", "user_said", 0.9),
+        make_item("他可能想家", "her_inference", 0.4),   # 出生默认，没验证过 → 该被拦
+        make_item("他可能爱熬夜", "her_inference", 0.7),  # 验证过，够格上场
+    ])
+
+    assert "关于他的事实" in block
+    assert "你的猜测" in block
+    assert "他可能想家" not in block      # 低置信猜测被拦
+    assert "他可能爱熬夜" in block        # 高置信猜测保留
 
 
 def test_format_recall_block_fact_requires_high_confidence():

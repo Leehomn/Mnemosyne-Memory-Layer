@@ -111,7 +111,8 @@ def test_reconstruct_full(tmp_path):
     # 假模型返回了 1 条事实 + 1 条猜测，应该新增 2 条
     assert added == 2
 
-    # 库里应该有这两条
+    # 事实区应该召回「他叫南风」；猜测是 her_inference 默认 0.4，
+    # 低于召回门槛 0.6，所以「他可能喜欢打游戏」不该出现在召回块里。
     block = cog.recall_block(limit=8)
     assert "他叫南风" in block
-    assert "他可能喜欢打游戏" in block
+    assert "他可能喜欢打游戏" not in block

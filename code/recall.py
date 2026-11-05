@@ -60,8 +60,12 @@ def format_recall_block(items):
              and m["confidence"] >= 0.8
              and m["subject"] != "about_self"]
 
-    # 猜测：AI 自己推断的
-    guesses = [m for m in items if m["source"] == "her_inference"]
+    # 猜测：AI 自己推断的，且置信度够高才「上场」
+    # 0.6 是门槛：低于它的猜测（比如出生默认 0.4、从没被验证过）不该在对话里被提出来，
+    # 免得 AI 顺着没把握的猜测往下乱编。这是「宁可漏记、不可乱记」在召回侧的一环。
+    guesses = [m for m in items
+               if m["source"] == "her_inference"
+               and m["confidence"] >= 0.6]
 
     parts = []
     if facts:
