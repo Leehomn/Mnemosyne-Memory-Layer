@@ -28,6 +28,24 @@ def test_parse_wu():
     assert items == []
 
 
+def test_parse_drop_boilerplate():
+    """模型把提示词里的示例文字原样抄出来时，必须丢弃，不能落库。
+
+    这是「宁可漏记，不可乱记」红线的护栏：示例文字不是用户真实记忆。
+    """
+    reply = (
+        "[事实] 他反复明确表达过的稳定特点\n"
+        "[猜测] 你从事件里推断出的规律\n"
+        "[事实] 他叫南风\n"
+        "[猜测] 他可能想家"
+    )
+    items = parse_reply(reply)
+
+    assert len(items) == 2
+    assert items[0]["text"] == "他叫南风"
+    assert items[1]["text"] == "他可能想家"
+
+
 # ===== 新增：parse_reply 的容错（这些格式以前全会静默丢记忆） =====
 
 def test_parse_numbered_list():
