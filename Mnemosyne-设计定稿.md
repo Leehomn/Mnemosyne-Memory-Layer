@@ -7,7 +7,7 @@
 > - 第一部分「思想与机制」——记录**为什么**这么设计（给人看）
 > - 第二部分「技术规格」——记录**怎么**实现（给代码看）
 >
-> 状态：思想层已定稿，技术层已同步至实际代码（2026-11-04：10 模块 / 86 测试）。
+> 状态：思想层已定稿，技术层已同步至实际代码（2026-11-04：10 模块 / 96 测试）。
 >
 > **技术选型（2026-10-25 定）**：本项目用 **Python** 实现（原方案文档中的 Node.js/`.mjs` 仅为原作者的环境选择，非项目约束）。理由：① 开发者正在学 Python，学以致用；② Python 是 AI/科研/「化学+AI」方向的主流语言；③ 大模型 SDK 生态 Python 最成熟。
 
@@ -589,7 +589,7 @@ cognition-memory/
 │   ├── demo_semantic_recall.py  # 语义召回演示
 │   ├── demo_llm_verify.py    # 验证机制演示
 │   ├── config.json           # API key 配置（不写死在代码里，开源时排除）
-│   ├── test_*.py             # ✅ 测试（10 份，86 条）
+│   ├── test_*.py             # ✅ 测试（10 份，96 条）
 │   └── data/                 # items.json（运行时生成，不进版本库）
 
 # 待实现：
@@ -749,22 +749,22 @@ cognition-memory/
 
 ### 10.1 测试现状
 
-**86 条测试，10 份测试文件，全绿（0.1 秒）。**
+**96 条测试，10 份测试文件，全绿（0.1 秒）。**
 
 | 测试文件 | 条数 | 覆盖 |
 |---|---|---|
-| `test_decay.py` | 6 | 衰减公式、半衰期、用进废退、复习失败 |
+| `test_decay.py` | 7 | 衰减公式、半衰期、用进废退、复习失败 |
 | `test_item.py` | 9 | 结构、校验、半衰期分层 |
 | `test_store.py` | 3 | 读写、备份、无 BOM |
 | `test_source.py` | 5 | 来源映射 |
-| `test_recall.py` | 11 | 召回排序、格式化分区、语义召回解析、墓碑过滤 |
-| `test_reconstruct.py` | 10 | `parse_reply` 各种装饰容错、consolidate |
-| `test_conflict.py` | 10 | 冲突检测、编号解析、无 item 不白调模型 |
-| `test_verify.py` | 14 | 四个函数全覆盖（judge_feedback 6 条、pick_verify_target 2 条） |
-| `test_index.py` | 17 | `Cognition` 各方法、合并增强、晋升、墓碑、软删除/真空清理 |
-| `test_consolidate.py` | **1** | 夜间整合（**覆盖薄弱，待补**） |
+| `test_recall.py` | 12 | 召回排序、格式化分区、语义召回解析、墓碑过滤 |
+| `test_reconstruct.py` | 11 | `parse_reply` 各种装饰容错、consolidate |
+| `test_conflict.py` | 12 | 冲突检测、编号解析、无 item 不白调模型 |
+| `test_verify.py` | 15 | 四个函数全覆盖（judge_feedback 6 条、pick_verify_target 2 条） |
+| `test_index.py` | 20 | `Cognition` 各方法、合并增强、晋升、墓碑、软删除/真空清理 |
+| `test_consolidate.py` | 2 | 夜间整合（依据回溯校验） |
 
-> **已知薄弱点**：`test_consolidate.py` 只有 1 条，而夜间整合是「事件 → 印象」的关键一步，且用真模型时会调两次（整合 + 记账）。后续应补：① `digested` 防重复的端到端验证 ② 真模型返回空/格式异常时的行为 ③ `kind` 参数生效验证。
+> **已知薄弱点**：`test_consolidate.py` 只有 2 条（2026-11-05 补了「依据回溯校验」），而夜间整合是「事件 → 印象」的关键一步，且用真模型时会调多次（整合 + 依据校验 + 记账）。后续可补：① `digested` 防重复的端到端验证 ② 真模型返回空/格式异常时的行为 ③ `kind` 参数生效验证。
 
 ### 10.2 测试怎么用假模型（不花 token）
 
