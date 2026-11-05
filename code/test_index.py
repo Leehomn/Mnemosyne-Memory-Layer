@@ -326,6 +326,47 @@ def test_maintain_vacuums_old_tombstone(tmp_path):
     assert "一条早该清掉的墓碑" not in texts     # 躺太久，被物理删
     assert "一条刚过期的墓碑" in texts          # 还没到清理时间，留着
 
+def test_consolidate_skips_tombstone(tmp_path):
+    """墓碑（deleted）不能被夜间整合拿去归纳。
+
+    否则已被反义推翻的旧事件会被重新捞起来总结，甚至反过来把
+    「戒辣」这类最新事实又标死（通电验证实测踩到过这个 bug）。
+
+    假模型基于「喂进来的事件」归纳：事件列表里有哪些活事件，
+    它就原样归纳出哪些印象。这样墓碑漏没漏进归纳输入，一目了然。
+    """
+    from index import Cognition
+
+    def fake_llm(prompt):
+        if "事件：" in prompt:
+            body = prompt.split("事件：", 1)[1].split("【严格输出格式】", 1)[0]
+            lines = [ln.strip("- ").strip() for ln in body.splitlines()
+                     if ln.strip().startswith("- ")]
+            return "\n".join(f"[事实] {ln}" for ln in lines)
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 一条活事件 + 一条墓碑事件
+    cog.remember("他最近戒辣了", source="user_said", layer="episode")
+    cog.remember("他超爱吃辣", source="user_said", layer="episode")
+    items = load_items(cog.path)
+    for m in items:
+        if m["text"] == "他超爱吃辣":
+            m["deleted"] = True
+            m["deleted_reason"] = "被新信息推翻"
+    save_items(items, cog.path)
+
+    # 夜间整合：归纳输入里不该包含墓碑「爱吃辣」
+    cog.consolidate()
+
+    # 关键：整个记忆库里，不该有任何「爱吃辣」的活印象/条目（墓碑除外）
+    items = load_items(cog.path)
+    spicy_live = [m for m in items
+                  if "爱吃辣" in m.get("text", "") and not m.get("deleted")]
+    assert spicy_live == [], "墓碑「爱吃辣」不该被归纳成活条目"
+
+
 def test_digested_episode_not_merged(tmp_path):
     """已被夜间整合消化过的 episode，不再参与去重合并。
 

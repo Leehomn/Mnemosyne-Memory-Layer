@@ -229,8 +229,12 @@ class Cognition:
         items = load_items(self.path)
 
         # 1. 筛选出「还没被消化过」的 episode（事件）
+        #    墓碑（deleted）不能拿来归纳：否则已被反义推翻的旧事件会被
+        #    重新捞起来总结，甚至反过来把「戒辣」这类最新事实又标死。
         episodes = [m for m in items
-                    if m.get("layer") == "episode" and not m.get("digested")]
+                    if m.get("layer") == "episode"
+                    and not m.get("digested")
+                    and not m.get("deleted")]
 
         if not episodes:
             return 0
