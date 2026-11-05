@@ -67,6 +67,17 @@ def parse_reply(reply):
 
         # 尾巴上的加粗符号也去掉（** 成对出现时）
         text = text.strip("*").strip()
+
+        # —— 拆出「依据」尾巴 ——
+        # 模型会写「[猜测] xxx → 依据：事件1、事件3」
+        # 把「→ 依据：事件N」从正文里切走，正文和依据编号分开存。
+        evidence = []
+        m_ev = re.search(r"依据[:：]\s*([^\n]*)", text)
+        if m_ev:
+            ev_part = m_ev.group(1)
+            evidence = [int(x) for x in re.findall(r"\d+", ev_part)]
+            text = text[:m_ev.start()].rstrip(" →-—、，,；;").strip()
+
         if not text:
             continue
 
@@ -75,10 +86,43 @@ def parse_reply(reply):
             continue
 
         source = "user_said" if tag == "事实" else "her_inference"
-        items.append({"text": text, "source": source})
-
+        items.append({"text": text, "source": source, "evidence": evidence})
     return items
 
+def verify_grounding(llm, guess_text, evidence_episodes):
+    """
+    语义核对：guess_text 这条归纳，是否真的被 evidence_episodes 这些事件「支撑」。
+
+    参数：
+        llm              : 模型函数
+        guess_text       : 归纳出来的那句话（猜测正文）
+        evidence_episodes: 它声称依据的事件原文列表
+
+    返回：
+        True  → 有依据（归纳成立）
+        False → 依据不足（归纳是乱编的）
+    """
+    if not evidence_episodes:
+        return False
+
+    lines = "\n".join(f"- {t}" for t in evidence_episodes)
+    prompt = (
+        "我在判断一句「归纳」是否靠谱。\n\n"
+        "归纳：「" + guess_text + "」\n\n"
+        "它声称依据的事件：\n" + lines + "\n\n"
+        "请判断：这句归纳里的每个关键点，是不是都能在这些事件里找到支撑？\n"
+        "- 能支撑 → 输出：是\n"
+        "- 支撑不住（归纳里出现了事件里根本没有的信息，或把没关系的两件事硬连起来）→ 输出：否\n\n"
+        "只输出一个字：是 或 否。不要解释。"
+    )
+    reply = llm(prompt).strip()
+
+    # 先判否定，再判肯定（避免「不是」里含「是」被误读）
+    if not reply:
+        return False
+    if "否" in reply or "不" in reply:
+        return False
+    return "是" in reply or "yes" in reply.lower()
 
 def reconstruct(llm, buffer, remember_func):
     """
@@ -148,7 +192,7 @@ def consolidate(llm, episodes, remember_func, kind="state"):
         return 0
 
     # 1. 拼事件列表
-    lines = "\n".join(f"- {e['text']}" for e in episodes)
+    lines = "\n".join(f"事件{i}：{e['text']}" for i, e in enumerate(episodes))
 
     # 2. 拼提示词
     prompt = (
@@ -162,6 +206,10 @@ def consolidate(llm, episodes, remember_func, kind="state"):
         "没有反复出现的规律，就只输出一个词：无\n"
         "不要写「有」「好的」等其他任何话，不要解释。\n"
         "【只归纳「反复出现」的，单次事件不要归纳】\n"
+        "【每条必须交代依据】\n"
+        "每条归纳后面，必须用「 → 依据：事件N、事件M」标注它依据的是哪几条事件。\n"
+        "事件编号从 0 开始。依据的事件，必须是「归纳句里的关键信息能在该事件原文里找到」的。\n"
+        "拿不出依据编号的，不许输出这条。\n"
     )
 
     # 3. 调模型 + 解析
@@ -172,14 +220,30 @@ def consolidate(llm, episodes, remember_func, kind="state"):
     added = 0
     for it in items:
         if it["source"] == "user_said":
-            source = "observed"      # 归纳的「事实」= 观察到的反复，不是原话
+            source = "observed"  # 归纳的「事实」= 观察到的反复，不是原话
         else:
             source = "her_inference"
+
+        # —— 依据回溯校验（做法 B：语义核对）——
+        # 猜测要「保留待验证」而不是丢弃：核对得上→正常 0.4；核对不上→压到 0.2 标待验证。
+        confidence = None
+        if source == "her_inference":
+            evidence_episodes = [
+                episodes[i]["text"]
+                for i in it.get("evidence", [])
+                if 0 <= i < len(episodes)
+            ]
+            if verify_grounding(llm, it["text"], evidence_episodes):
+                confidence = 0.4  # 依据充分：显式写 0.4，不靠下游查默认
+            else:
+                confidence = 0.2  # 依据不足，压到 0.2，保留待验证
+
         result = remember_func(
             it["text"],
             source=source,
             layer="impression",
             kind=kind,
+            confidence=confidence,
         )
         if result is not None:
             added += 1

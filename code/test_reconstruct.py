@@ -9,8 +9,8 @@ def test_parse_fact_and_guess():
     items = parse_reply(reply)
 
     assert len(items) == 2
-    assert items[0] == {"text": "他是四川人，能吃辣", "source": "user_said"}
-    assert items[1] == {"text": "他可能不太喜欢被叫大肥鱼", "source": "her_inference"}
+    assert items[0] == {"text": "他是四川人，能吃辣", "source": "user_said", "evidence": []}
+    assert items[1] == {"text": "他可能不太喜欢被叫大肥鱼", "source": "her_inference", "evidence": []}
 
 
 def test_parse_drop_invalid():
