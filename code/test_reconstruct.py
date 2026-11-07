@@ -94,6 +94,36 @@ def test_parse_empty_and_blank_lines():
     assert parse_reply("[事实]\n[猜测]   ") == []
 
 
+def test_reconstruct_passes_now_to_prompt():
+    """now 参数要把「当前日期」拼进提示词，让模型能把相对时间换算成绝对日期。
+
+    用假模型把收到的提示词原样返回，断言提示词里出现了日期 + 换算指令。
+    """
+    seen = {}
+
+    def capture_llm(prompt):
+        seen["prompt"] = prompt
+        return "无"
+
+    reconstruct(capture_llm, ["用户：我下周三约了人"], lambda *a, **k: None, now="2026-04-13")
+
+    assert "2026-04-13" in seen["prompt"]
+    assert "绝对日期" in seen["prompt"]
+
+
+def test_reconstruct_without_now_keeps_compat():
+    """不传 now 时，提示词里不该出现「当前日期」段（向后兼容）。"""
+    seen = {}
+
+    def capture_llm(prompt):
+        seen["prompt"] = prompt
+        return "无"
+
+    reconstruct(capture_llm, ["用户：你好"], lambda *a, **k: None)
+
+    assert "当前日期" not in seen["prompt"]
+
+
 def fake_llm(prompt):
     return "[事实] 他叫南风\n[猜测] 他可能喜欢打游戏"
 

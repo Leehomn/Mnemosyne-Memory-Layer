@@ -40,6 +40,7 @@
 | 晋升 | state（动态表现）反复出现 ≥3 次 → trait（稳定内核，半衰期 60→3650 天） | `item.py` / `index.py` |
 | 夜间整合 | consolidate，事件 → 印象（`digested` 记账防重复归纳） | `reconstruct.py` / `index.py` |
 | 语义召回 | semantic_recall，用模型判断相关性（含时间远近、反义/过时识别） | `recall.py` |
+| **时间锚点** | `reconstruct` 的 `now` 参数，让模型把「下周三」「前天」换算成绝对日期写进记忆 | `reconstruct.py` |
 | **冲突检测** | find_conflicts，新记忆推翻旧记忆时自动识别 | `conflict.py` |
 | **软删除 + 墓碑** | 被推翻的记忆标 `deleted` 而不真删，可追溯、可恢复 | `item.py` / `recall.py` / `index.py` |
 | **验证机制** | 两层触发：有不确定印象（规则）+ 用户敞开心扉（模型） | `verify.py` |

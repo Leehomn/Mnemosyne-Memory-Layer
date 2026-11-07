@@ -671,7 +671,8 @@ cognition-memory/
 ### 7.7 事后重构（reconstruct.py，2026-10-31 实现，已接入真模型）
 
 - **流程**：对话 buffer → `llm(提示词)` → `parse_reply` 解析 `[事实]/[猜测]` → `remember_func` 写库。
-- **解耦设计**：`reconstruct(llm, buffer, remember_func)` 不绑定具体模型——`llm` 可为真模型或 mock，接 DeepSeek 只换 `llm` 函数。
+- **解耦设计**：`reconstruct(llm, buffer, remember_func, now=None)` 不绑定具体模型——`llm` 可为真模型或 mock，接 DeepSeek 只换 `llm` 函数。
+- **时间锚点**（2026-11-07 加）：`now` 参数可选，传了就在提示词开头拼「当前日期」，让模型把「下周三」「前天」这类相对时间换算成绝对日期写进正文，治「相对日期/时间题」漏记。不传则与旧版完全一致（向后兼容）。
 - **解析规则**（`parse_reply`，严格、呼应 5.5）：
   - `[事实]xxx` → `source="user_said"`
   - `[猜测]xxx` → `source="her_inference"`
