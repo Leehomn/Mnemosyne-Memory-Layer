@@ -163,3 +163,21 @@ def test_format_recall_block_excludes_about_self():
         make_item("我说了难听的话", "user_said", 0.9, subject="about_self")
     ])
     assert block == ""
+
+
+def test_confirmed_guess_enters_facts_not_guesses():
+    """被验证确认的猜测（her_inference 但置信度 >= 0.8）要进事实区，不能再进猜测区。
+
+    这是「方案乙」：被验证过的记忆应该更强——置信度升到 0.9 后，
+    它终于能进「可以当真」的事实区；同时不能再顶着「别当事实」的猜测标签，
+    否则一条记忆既被说成事实、又被说成猜测，自相矛盾。
+    """
+    from recall import format_recall_block
+
+    block = format_recall_block([
+        make_item("他可能想家", "her_inference", 0.9),   # 被验证确认，升到 0.9
+    ])
+
+    assert "关于他的事实" in block      # 进事实区
+    assert "他可能想家" in block        # 文本在
+    assert "你的猜测" not in block      # 关键：不能再进猜测区

@@ -3,7 +3,6 @@
 import re
 
 from decay import decayed_weight, days_since, effective_half_life
-from source import is_confirmed
 
 
 def recall(items, limit=8, now=None):
@@ -47,8 +46,8 @@ def format_recall_block(items):
     把召回的记忆，格式化成「事实区 / 猜测区」分离的文字块。
 
     规则：
-    - 事实区：source=user_said 且置信度高，且【关于用户或我们之间】
-    - 猜测区：her_inference（AI 自己推断的）
+    - 事实区：置信度够高（>= 0.8，即被证实），且【关于用户或我们之间】，不看来源
+    - 猜测区：her_inference 且置信度中等（0.6 ~ 0.8，被验证过一部分但还没到当真）
     - 关于 AI 自己的事（about_self）：不进事实区
 
     返回：
@@ -56,16 +55,16 @@ def format_recall_block(items):
     """
     # 事实：用户说的，高置信，且不是「关于AI自己」的
     facts = [m for m in items
-             if is_confirmed(m["source"])
-             and m["confidence"] >= 0.8
+             if m["confidence"] >= 0.8  # 置信度够高 = 被证实（不管来源）
              and m["subject"] != "about_self"]
-
-    # 猜测：AI 自己推断的，且置信度够高才「上场」
-    # 0.6 是门槛：低于它的猜测（比如出生默认 0.4、从没被验证过）不该在对话里被提出来，
-    # 免得 AI 顺着没把握的猜测往下乱编。这是「宁可漏记、不可乱记」在召回侧的一环。
+de
+    # 猜测：AI 自己推断的，且置信度「中等」才进猜测区。
+    # 0.6 ~ 0.8：被验证过一部分、但还没到「可以当真」的程度 → 进猜测区，标「别当事实」。
+    # < 0.6：出生默认 0.4、从没验证过 → 连猜测区都不进（免得顺着没把握的猜测乱编）。
+    # >= 0.8：已经和事实区重叠了，这里要排除——一条被证实的猜测不能既当事实又当猜测。
     guesses = [m for m in items
                if m["source"] == "her_inference"
-               and m["confidence"] >= 0.6]
+               and 0.6 <= m["confidence"] < 0.8]
 
     parts = []
     if facts:
