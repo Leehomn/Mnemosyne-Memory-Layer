@@ -57,7 +57,7 @@ def format_recall_block(items):
     facts = [m for m in items
              if m["confidence"] >= 0.8  # 置信度够高 = 被证实（不管来源）
              and m["subject"] != "about_self"]
-de
+
     # 猜测：AI 自己推断的，且置信度「中等」才进猜测区。
     # 0.6 ~ 0.8：被验证过一部分、但还没到「可以当真」的程度 → 进猜测区，标「别当事实」。
     # < 0.6：出生默认 0.4、从没验证过 → 连猜测区都不进（免得顺着没把握的猜测乱编）。
