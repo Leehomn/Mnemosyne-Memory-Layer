@@ -124,6 +124,38 @@ def test_reconstruct_without_now_keeps_compat():
     assert "当前日期" not in seen["prompt"]
 
 
+def test_relative_time_without_date_is_dropped():
+    """相对时间词还在、却没换算成绝对日期 → 该拦下（时间信息已坏，不记）。"""
+    added = reconstruct(
+        lambda p: "[事实] 他下周三约了人",
+        ["用户：我下周三约了人"],
+        lambda *a, **k: "ok",   # 假 remember：返回非 None，模拟「已写入」
+        now="2026-04-13",
+    )
+    assert added == 0
+
+
+def test_absolute_date_is_kept():
+    """换算成绝对日期后，正常落库。"""
+    added = reconstruct(
+        lambda p: "[事实] 他 2026-04-13 约了人",
+        ["用户：我下周三约了人"],
+        lambda *a, **k: "ok",
+        now="2026-04-13",
+    )
+    assert added == 1
+
+
+def test_no_time_word_is_kept():
+    """没有时间词的记忆（如「他是四川人」）不该被误伤，照常落库。"""
+    added = reconstruct(
+        lambda p: "[事实] 他是四川人，能吃辣",
+        ["用户：我是四川人"],
+        lambda *a, **k: "ok",
+    )
+    assert added == 1
+
+
 def fake_llm(prompt):
     return "[事实] 他叫南风\n[猜测] 他可能喜欢打游戏"
 
