@@ -92,14 +92,6 @@ def format_recall_block(items):
     # 这段是要直接喂给模型的提示词，格式乱会削弱「事实/猜测」的分区感。
     return "\n\n".join(parts) + "\n\n用法：聊到相关再说，别主动复述。"
 
-# 语义召回喂给模型细判前，先用「权重」取 top-N 做上限保护。
-# 全库（P14 实测 3057 条）直接喂模型会过拟合漏判、且慢；
-# 但也不能用「字面粗筛」——那会砍掉「字面不沾边但语义相关」的记忆
-# （语义召回存在的意义）。所以这里用「权重排序取 top-N」：
-# 只牺牲「本就沉底、权重很低」的记忆，不牺牲「语义相关但字面不同」的召回。
-_SEMANTIC_RECALL_PRESELECT_LIMIT = 100   # 喂模型前，按权重最多取这么多条
-
-
 def semantic_recall(llm, items, query, now=None):
     """
     用模型综合判断：items 里哪些和 query 相关（含时间远近、含反义/过时）。
@@ -117,13 +109,6 @@ def semantic_recall(llm, items, query, now=None):
     items = [m for m in items if not m.get("deleted")]
     if not items:
         return []
-
-    # —— 上限保护：按权重取 top-N，防止全库喂爆模型 ——
-    # 注意这里调用的是本模块的 recall()（按权重排序），不是语义判断。
-    # 语义相关但字面不同的记忆只要权重不沉底，仍会进候选、再由模型细判。
-    # 不传 now：权重衰减用系统时间即可（now 是「日期字符串」供提示词用，
-    # 和 recall 要的「datetime 时刻」不是一回事，混传会炸）。
-    items = recall(items, limit=_SEMANTIC_RECALL_PRESELECT_LIMIT)
 
     # 今天的日期：真实系统里就是「现在」，供模型理解查询里的相对时间词。
     # 不传就用系统当前日期——这样真实对话里用户说「前天/上周」，模型能换算。
