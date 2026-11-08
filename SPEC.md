@@ -3,7 +3,7 @@
 > 配套 `DESIGN.md`。这里写「长什么样」，不写「为什么这样」。
 >
 > **状态（2026-11-08）**：**已实施**，本文档已同步至实际 Python 代码。
-> 10 个模块、113 条测试全绿。
+> 10 个模块、122 条测试全绿。
 >
 > **历史说明**：本文件最初（2026-10-24）是给 **Node.js / `.mjs`** 写的规格。
 > 2026-10-25 技术选型改为 **Python**（理由：开发者正在学 Python，学以致用；
@@ -82,7 +82,7 @@ code/
 ├── llm.py             DeepSeek 接入层
 └── index.py           统一入口 Cognition 类
 
-测试（10 份，113 条）：
+测试（10 份，122 条）：
 test_decay / test_item / test_store / test_source / test_recall
 test_reconstruct / test_conflict / test_consolidate / test_verify / test_index
 
@@ -299,7 +299,7 @@ def semantic_recall(llm, items, query)  # 用模型判断相关性
 
 ### 6.1 现状
 
-**113 条测试，10 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
+**122 条测试，10 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
 分布见 `Mnemosyne-设计定稿.md` §10.1。
 
 ### 6.2 禁止的测试写法（红线）
