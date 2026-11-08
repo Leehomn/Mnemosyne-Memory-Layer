@@ -385,6 +385,7 @@
   |---|---|---|
   | `[事实]`（反复明确说的） | `observed` | 归纳的「事实」= 观察到的反复，**不是原话** |
   | `[猜测]`（推断的规律） | `her_inference` | 推断 |
+  | `[我说]`（AI 自己说的） | `self_said` | 保持 AI 自述身份，不降成推断（2026-11-08 新增） |
 - **「即时 vs 归纳」的区分（落地双通道 4.3）**：
   | 通道 | 来源 | 谁产生 |
   |---|---|---|
@@ -459,6 +460,7 @@
   - `her_inference`（我推的）→ 放「你的猜测」区，**明说别当事实讲**。
   - `observed`（观察到的）→ 客观数据。
   - `third_party`（别人说的）→ 必须带说话人，禁止算到对话对象头上。
+  - `self_said`（AI 自己说过的）→ 放「你之前说过的话」区，**不是他的事实**，单独分区（2026-11-08 新增，呼应「助手自己说过的话」考点）。
 
 ### 5.2 宁可漏记，不可乱记：假记忆是头号敌人
 
@@ -519,7 +521,7 @@ item = {
     "id": "lq8f3a-2b7c",          # 唯一标识
     "layer": "episode",           # episode | impression | relationship
     "text": "他胃疼那天我说了难听的，他回'你一点都不关心我'",
-    "source": "user_said",        # user_said | her_inference | observed | third_party
+    "source": "user_said",        # user_said | her_inference | observed | third_party | self_said
     "confidence": 0.95,           # 0~1
     "subject": "about_user",      # about_user | about_self | about_us（2026-10-28 修正）
     "base_weight": 1.5,           # 初始权重，由峰值情绪强度决定
@@ -592,7 +594,7 @@ cognition-memory/
 │   ├── demo_semantic_recall.py  # 语义召回演示
 │   ├── demo_llm_verify.py    # 验证机制演示
 │   ├── config.json           # API key 配置（不写死在代码里，开源时排除）
-│   ├── test_*.py             # ✅ 测试（10 份，106 条）
+│   ├── test_*.py             # ✅ 测试（10 份，113 条）
 │   └── data/                 # items.json（运行时生成，不进版本库）
 
 # 待实现：
@@ -666,10 +668,11 @@ cognition-memory/
   |---|---|---|
   | `user_said` | 0.9 | 证实 |
   | `observed` | 0.8 | 证实 |
+  | `self_said` | 0.9 | **证实（AI 自己说的，不是猜）** |
   | `third_party` | 0.5 | **转述（非证实）** |
   | `her_inference` | 0.4 | **猜测** |
 
-- **接口**：`default_confidence(source)` 查表；`is_confirmed(source)` 判断证实/猜测（**只认 user_said / observed，third_party 不算证实**——别人转述可能失真，呼应 5.1「禁止算到对话对象头上」）。事实区判断（`recall.py`）统一走 `is_confirmed`，不再各自硬编码来源元组。
+- **接口**：`default_confidence(source)` 查表；`is_confirmed(source)` 判断证实/猜测（**只认 user_said / observed / self_said，third_party 不算证实**——别人转述可能失真，呼应 5.1「禁止算到对话对象头上」）。事实区判断（`recall.py`）统一走 `is_confirmed`，不再各自硬编码来源元组。
 
 ### 7.7 事后重构（reconstruct.py，2026-10-31 实现，已接入真模型）
 
@@ -679,8 +682,9 @@ cognition-memory/
   - **C1 强化（2026-11-07）**：提示词里「带时间的事件」升级为「必须记 + 必须换算成绝对日期」；`reconstruct()` 写入循环加校验——正文若还留着相对时间词（`昨天/前天/下周三`…）却**没**换算成绝对日期，这条直接拦下不记（时间信息已坏，宁可漏记不可乱记）。
   - **event_time 结构化（2026-11-08）**：`reconstruct()` 写库时用 `_DATE_PATTERN` 抠正文里的绝对日期，写进 `remember_func` 的 `event_time` 字段（抠不到传 `None`）。从此日期不只是埋在正文字符串里，可被结构化检索。
 - **解析规则**（`parse_reply`，严格、呼应 5.5）：
-  - `[事实]xxx` → `source="user_said"`
-  - `[猜测]xxx` → `source="her_inference"`
+  - `[事实]xxx` → `source="user_said"` + `subject="about_user"`
+  - `[猜测]xxx` → `source="her_inference"` + `subject="about_user"`
+  - `[我说]xxx` → `source="self_said"` + `subject="about_self"`（AI 自己说过的话，2026-11-08 新增）
   - 无前缀的行 → 丢弃（防模型乱写）
 
 ### 7.7b 接入真模型（2026-10-31 完成）
@@ -755,7 +759,7 @@ cognition-memory/
 
 ### 10.1 测试现状
 
-**106 条测试，10 份测试文件，全绿（0.1 秒）。**
+**113 条测试，10 份测试文件，全绿（0.1 秒）。**
 
 | 测试文件 | 条数 | 覆盖 |
 |---|---|---|
@@ -764,10 +768,10 @@ cognition-memory/
 | `test_store.py` | 3 | 读写、备份、无 BOM |
 | `test_source.py` | 5 | 来源映射 |
 | `test_recall.py` | 13 | 召回排序、格式化分区、语义召回解析、墓碑过滤 |
-| `test_reconstruct.py` | 18 | `parse_reply` 各种装饰容错、consolidate、时间换算校验、event_time 抠日期 |
+| `test_reconstruct.py` | 19 | `parse_reply` 各种装饰容错、`[我说]` 自述通道、consolidate、时间换算校验、event_time 抠日期 |
 | `test_conflict.py` | 12 | 冲突检测、编号解析、无 item 不白调模型 |
 | `test_verify.py` | 15 | 四个函数全覆盖（judge_feedback 6 条、pick_verify_target 2 条） |
-| `test_index.py` | 20 | `Cognition` 各方法、合并增强、晋升、墓碑、软删除/真空清理 |
+| `test_index.py` | 21 | `Cognition` 各方法、合并增强、晋升、墓碑、软删除/真空清理、consolidate 排除自述 |
 | `test_consolidate.py` | 2 | 夜间整合（依据回溯校验） |
 
 > **已知薄弱点**：`test_consolidate.py` 只有 2 条（2026-11-05 补了「依据回溯校验」），而夜间整合是「事件 → 印象」的关键一步，且用真模型时会调多次（整合 + 依据校验 + 记账）。后续可补：① `digested` 防重复的端到端验证 ② 真模型返回空/格式异常时的行为 ③ `kind` 参数生效验证。

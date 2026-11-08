@@ -3,7 +3,7 @@
 > 配套 `DESIGN.md`。这里写「长什么样」，不写「为什么这样」。
 >
 > **状态（2026-11-08）**：**已实施**，本文档已同步至实际 Python 代码。
-> 10 个模块、106 条测试全绿。
+> 10 个模块、113 条测试全绿。
 >
 > **历史说明**：本文件最初（2026-10-24）是给 **Node.js / `.mjs`** 写的规格。
 > 2026-10-25 技术选型改为 **Python**（理由：开发者正在学 Python，学以致用；
@@ -21,7 +21,7 @@
 ```python
 {
   "text": "他叫南风，是四川人",
-  "source": "user_said",        # user_said | her_inference | observed | third_party
+  "source": "user_said",        # user_said | her_inference | observed | third_party | self_said
   "confidence": 0.9,            # 0~1，不传则按 source 自动取
   "layer": "episode",           # episode | impression | relationship
   "hits": 0,                    # 被想起的次数（decay 用它拉长半衰期）
@@ -82,7 +82,7 @@ code/
 ├── llm.py             DeepSeek 接入层
 └── index.py           统一入口 Cognition 类
 
-测试（10 份，106 条）：
+测试（10 份，113 条）：
 test_decay / test_item / test_store / test_source / test_recall
 test_reconstruct / test_conflict / test_consolidate / test_verify / test_index
 
@@ -130,12 +130,13 @@ class Cognition:
 **提示词**（`reconstruct.py:reconstruct` 里实际拼的，不是原设计稿）：
 
 ```
-下面是一段对话。你要从对话里，提炼出「对他这个人的新认识」。
+下面是一段对话。你要从对话里，提炼出「对他这个人的新认识」，以及「你（AI）自己说过、且他可能回头问的话」。
 
 【严格输出格式，必须遵守】
-每行一条，只能以下面两种前缀开头，除此之外什么都不能有：
+每行一条，只能以下面三种前缀开头，除此之外什么都不能有：
 [事实] 后面写：他明确说过的事
 [猜测] 后面写：你推断的、但没直说的事
+[我说] 后面写：你（AI）自己说过、且他可能回头问的事（承诺、建议、自述、关系约定）
 没有新认识，就只输出一个词：无
 绝对不要写「有」「好的」等其他任何话，不要解释。
 
@@ -158,8 +159,9 @@ class Cognition:
 
 **解析规则**（`reconstruct.py:parse_reply`，2026-11-03 加固）：
 
-- `[事实]` → `source="user_said"`, `confidence=0.9`
-- `[猜测]` → `source="her_inference"`, `confidence=0.4`
+- `[事实]` → `source="user_said"`, `confidence=0.9`, `subject="about_user"`
+- `[猜测]` → `source="her_inference"`, `confidence=0.4`, `subject="about_user"`
+- `[我说]` → `source="self_said"`, `confidence=0.9`, `subject="about_self"`（2026-11-08 新增）
 - 没有前缀的行 → 丢弃（防止模型乱写）
 - 输出「无」→ 什么都不做
 
@@ -201,11 +203,14 @@ def semantic_recall(llm, items, query)  # 用模型判断相关性
 你的猜测（不是他说的，别当事实讲）：
 - 他可能不太喜欢被叫"大肥鱼"
 
+你之前说过的话（你自己说过的，不是他的事实）：
+- 我建议过按日期分堆整理小票
+
 用法：聊到相关再说，别主动复述。
 ```
 
 **关键**：事实区要求 `source in (user_said, observed)` 且 `confidence >= 0.8`
-且 `subject != about_self`；猜测区只放 `her_inference`。
+且 `subject != about_self`；猜测区只放 `her_inference`；「你之前说过的话」区放 `self_said`（`subject == about_self`）。
 第一代的问题就是所有条目混在一起，模型分不清真假。
 
 **语义召回的「反义识别」**：`semantic_recall` 让模型判断相关性，
@@ -294,7 +299,7 @@ def semantic_recall(llm, items, query)  # 用模型判断相关性
 
 ### 6.1 现状
 
-**106 条测试，10 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
+**113 条测试，10 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
 分布见 `Mnemosyne-设计定稿.md` §10.1。
 
 ### 6.2 禁止的测试写法（红线）
