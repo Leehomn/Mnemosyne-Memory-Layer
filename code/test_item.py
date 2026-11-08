@@ -75,3 +75,15 @@ def test_event_time_stored_when_passed():
     # 显式传 event_time 时，原样存下
     item = make_item("他 2026-05-25 搬花", "user_said", 0.9, event_time="2026-05-25")
     assert item["event_time"] == "2026-05-25"
+
+
+def test_topic_defaults_to_none():
+    # 不传 topic 时，默认 None（老数据兼容，无该字段也不崩）
+    item = make_item("他胃疼", "user_said", 0.9)
+    assert item["topic"] is None
+
+
+def test_topic_stored_when_passed():
+    # 显式传 topic 时，原样存下
+    item = make_item("他养了狗", "user_said", 0.9, topic="养狗")
+    assert item["topic"] == "养狗"

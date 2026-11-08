@@ -91,6 +91,15 @@ def parse_reply(reply):
             evidence = [int(x) for x in re.findall(r"\d+", ev_part)]
             text = text[:m_ev.start()].rstrip(" →-—、，,；;").strip()
 
+        # —— 拆出「话题」尾巴 ——
+        # 模型会写「[事实] 他养了狗 #话题：养狗」
+        # 把「#话题：X」从正文里切走，正文和话题标签分开存。
+        topic = None
+        m_topic = re.search(r"#\s*话题\s*[:：]\s*([^\n#]*)", text)
+        if m_topic:
+            topic = m_topic.group(1).strip(" ，,。.、;；")
+            text = text[:m_topic.start()].rstrip(" →-—、，,；; ").strip()
+
         if not text:
             continue
 
@@ -105,7 +114,8 @@ def parse_reply(reply):
             # 主体是 about_self（关于 AI 自己）。这是独立的一格，不能混进用户事实。
             source = "self_said"
             subject = "about_self"
-        items.append({"text": text, "source": source, "subject": subject, "evidence": evidence})
+        items.append({"text": text, "source": source, "subject": subject,
+                      "evidence": evidence, "topic": topic})
     return items
 
 def verify_grounding(llm, guess_text, evidence_episodes):
@@ -170,6 +180,7 @@ def reconstruct(llm, buffer, remember_func, now=None):
             "[事实] 后面写：他明确说过的事\n"
             "[猜测] 后面写：你推断的、但没直说的事\n"
             "[我说] 后面写：你（AI）自己说过、且他可能回头问的事（承诺、建议、你的自述、关系约定）\n"
+            "每条正文后面，用「 #话题：X」标注这句话属于什么话题（X 用一个简短的名词短语，如「养狗」「工作」「生日」）。\n"
             "没有新认识，就只输出一个词：无\n"
             "绝对不要写「有」「好的」等其他任何话，不要解释。\n\n"
             "【只记值得长期记的，按「人脑记什么」来取舍】\n"
@@ -224,7 +235,7 @@ def reconstruct(llm, buffer, remember_func, now=None):
         if m_date:
             event_time = m_date.group(0)
         result = remember_func(text, source=it["source"], subject=it["subject"],
-                               event_time=event_time)
+                               event_time=event_time, topic=it.get("topic"))
         if result is not None:   # 没被去重/没失败，才算「新增」
             added += 1
 

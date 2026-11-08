@@ -10,9 +10,9 @@ def test_parse_fact_and_guess():
 
     assert len(items) == 2
     assert items[0] == {"text": "他是四川人，能吃辣", "source": "user_said",
-                        "subject": "about_user", "evidence": []}
+                        "subject": "about_user", "evidence": [], "topic": None}
     assert items[1] == {"text": "他可能不太喜欢被叫大肥鱼", "source": "her_inference",
-                        "subject": "about_user", "evidence": []}
+                        "subject": "about_user", "evidence": [], "topic": None}
 
 
 def test_parse_self_said():
@@ -202,6 +202,39 @@ def test_event_time_none_without_date():
         remember,
     )
     assert captured["event_time"] is None
+
+
+def test_parse_topic_tag():
+    """正文后面的「#话题：X」要切走，话题词单独存进 topic 字段，正文里不残留。"""
+    items = parse_reply("[事实] 他养了狗叫瓦片 #话题：养狗\n[猜测] 他最近压力大 #话题：工作")
+
+    assert len(items) == 2
+    assert items[0]["text"] == "他养了狗叫瓦片"
+    assert items[0]["topic"] == "养狗"
+    assert items[1]["text"] == "他最近压力大"
+    assert items[1]["topic"] == "工作"
+
+
+def test_parse_no_topic_is_none():
+    """没写 #话题 时，topic 为 None（不打标签）。"""
+    items = parse_reply("[事实] 他叫南风")
+    assert items[0]["topic"] is None
+
+
+def test_topic_passed_to_remember():
+    """话题标签要透传给 remember_func 的 topic 参数。"""
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["topic"] = kwargs.get("topic")
+        return "ok"
+
+    reconstruct(
+        lambda p: "[事实] 他养了狗 #话题：养狗",
+        ["用户：我养了条狗"],
+        remember,
+    )
+    assert captured["topic"] == "养狗"
 
 
 def fake_llm(prompt):

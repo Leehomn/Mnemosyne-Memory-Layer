@@ -19,7 +19,7 @@ IMPRESSION_HALF_LIVES = {
 def make_item(text, source, confidence, layer="episode", hits=0,
               base_weight=1.0, half_life=None, created_at=None,
               subject="about_user", kind=None, occurrences=1,
-              event_time=None):
+              event_time=None, topic=None):
     """
     创建一条记忆条目（返回一个字典）。
 
@@ -31,6 +31,9 @@ def make_item(text, source, confidence, layer="episode", hits=0,
                       - created_at = 这条记忆「什么时候被记住」的（系统时间戳，用于衰减）
                       - event_time = 这条记忆「讲的是哪一天的事」的（逻辑日期，用于按日期检索/排序）
                       默认 None，老数据没有这个字段也完全兼容。
+        topic       : 可选。这条记忆的「话题标签」字符串（如 "养狗"/"工作"）。
+                      由模型在写入时顺带输出，用于将来「按话题缩小召回范围」。
+                      现在只存不筛，先观察话题词质量；默认 None，老数据兼容。
 
     返回：
         一个字典，代表一条记忆
@@ -54,6 +57,7 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         "half_life": half_life,
         "created_at": created_at,
         "event_time": event_time,    # 事件发生的逻辑日期（可选，None=没记/不适用）
+        "topic": topic,              # 话题标签（可选，None=没打标签，供将来按话题召回）
         "subject": subject,
         "kind": kind,
         "occurrences": occurrences,   # 在对话里反复出现的次数
