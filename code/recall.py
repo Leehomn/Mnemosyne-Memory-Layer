@@ -44,12 +44,13 @@ def recall(items, limit=8, now=None):
 
 def format_recall_block(items):
     """
-    把召回的记忆，格式化成「事实区 / 猜测区」分离的文字块。
+    把召回的记忆，格式化成「事实区 / 猜测区 / 我说过的话区」分离的文字块。
 
     规则：
     - 事实区：置信度够高（>= 0.8，即被证实），且【关于用户或我们之间】，不看来源
     - 猜测区：her_inference 且置信度中等（0.6 ~ 0.8，被验证过一部分但还没到当真）
-    - 关于 AI 自己的事（about_self）：不进事实区
+    - 我说过的话区：subject=about_self（AI 自己说过的承诺/建议/自述），单独分区，
+      明确标注「这是你之前说的，不是他的事实」——既不能被当成用户事实，也不能丢。
 
     返回：
         一段格式化文字；没有记忆则返回空字符串
@@ -58,6 +59,10 @@ def format_recall_block(items):
     facts = [m for m in items
              if m["confidence"] >= 0.8  # 置信度够高 = 被证实（不管来源）
              and m["subject"] != "about_self"]
+
+    # 我说过的话：关于 AI 自己的（about_self），单独一区。
+    # 置信度不设门槛——AI 自己说过的话是确定的（self_said 出生即 0.9），不是猜。
+    self_said = [m for m in items if m.get("subject") == "about_self"]
 
     # 猜测：AI 自己推断的，且置信度「中等」才进猜测区。
     # 0.6 ~ 0.8：被验证过一部分、但还没到「可以当真」的程度 → 进猜测区，标「别当事实」。
@@ -75,6 +80,10 @@ def format_recall_block(items):
     if guesses:
         lines = "\n".join(f"- {m['text']}" for m in guesses)
         parts.append(f"你的猜测（不是他说的，别当事实讲）：\n{lines}")
+
+    if self_said:
+        lines = "\n".join(f"- {m['text']}" for m in self_said)
+        parts.append(f"你之前说过的话（你自己说过的，不是他的事实）：\n{lines}")
 
     if not parts:
         return ""

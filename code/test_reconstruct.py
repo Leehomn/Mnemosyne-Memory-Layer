@@ -9,8 +9,23 @@ def test_parse_fact_and_guess():
     items = parse_reply(reply)
 
     assert len(items) == 2
-    assert items[0] == {"text": "他是四川人，能吃辣", "source": "user_said", "evidence": []}
-    assert items[1] == {"text": "他可能不太喜欢被叫大肥鱼", "source": "her_inference", "evidence": []}
+    assert items[0] == {"text": "他是四川人，能吃辣", "source": "user_said",
+                        "subject": "about_user", "evidence": []}
+    assert items[1] == {"text": "他可能不太喜欢被叫大肥鱼", "source": "her_inference",
+                        "subject": "about_user", "evidence": []}
+
+
+def test_parse_self_said():
+    """[我说] 前缀 → source=self_said + subject=about_self（AI 自己说的话，独立一格）。"""
+    reply = "[我说] 我建议他理票先按日期分堆\n[事实] 他叫南风"
+    items = parse_reply(reply)
+
+    assert len(items) == 2
+    assert items[0]["text"] == "我建议他理票先按日期分堆"
+    assert items[0]["source"] == "self_said"
+    assert items[0]["subject"] == "about_self"
+    assert items[1]["source"] == "user_said"
+    assert items[1]["subject"] == "about_user"
 
 
 def test_parse_drop_invalid():

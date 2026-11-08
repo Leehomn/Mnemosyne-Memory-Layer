@@ -9,6 +9,7 @@ def test_known_sources_have_fixed_confidence():
     assert default_confidence("observed") == 0.8
     assert default_confidence("third_party") == 0.5
     assert default_confidence("her_inference") == 0.4
+    assert default_confidence("self_said") == 0.9
 
 
 def test_unknown_source_falls_back_to_default():
@@ -17,9 +18,10 @@ def test_unknown_source_falls_back_to_default():
 
 
 def test_is_confirmed_true_for_verified_sources():
-    # 证实：用户说的 / 观察到的 / 第三方
+    # 证实：用户说的 / 观察到的 / AI 自己说的
     assert is_confirmed("user_said") is True
     assert is_confirmed("observed") is True
+    assert is_confirmed("self_said") is True
     assert is_confirmed("third_party") is False
 
 

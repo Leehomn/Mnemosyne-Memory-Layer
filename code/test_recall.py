@@ -28,7 +28,7 @@ def test_recall_respects_limit():
 
 
 def test_format_recall_block_keeps_self_out_of_facts():
-    # 关于 AI 自己的事，不进事实区（bug 修复验证）
+    # 关于 AI 自己的事，不进「事实区」，但进独立的「我说过的话」区
     m_user = make_item("我叫南风", "user_said", 0.95, subject="about_user")
     m_self = make_item("他胃疼那天我说了难听的话", "user_said", 0.95, subject="about_self")
     m_guess = make_item("他喜欢打游戏", "her_inference", 0.6)
@@ -37,7 +37,11 @@ def test_format_recall_block_keeps_self_out_of_facts():
 
     assert "我叫南风" in text                      # 事实区有这个
     assert "他喜欢打游戏" in text                   # 猜测区有这个
-    assert "我说了难听的话" not in text              # 关键：关于AI自己的事，被挡在事实区外
+    assert "我说了难听的话" in text                  # 进了「我说过的话」区
+    assert "你之前说过的话" in text                 # 有「我说过的话」分区标题
+    # 关键：AI 自己的话不能混进「关于他的事实」区
+    fact_block = text.split("你的猜测", 1)[0]
+    assert "我说了难听的话" not in fact_block
 
 
 def fake_llm(prompt):
@@ -179,13 +183,15 @@ def test_format_recall_block_fact_requires_high_confidence():
 
 
 def test_format_recall_block_excludes_about_self():
-    """关于 AI 自己的事（about_self）不进事实区，避免把 AI 的话当用户的事实。"""
+    """关于 AI 自己的事（about_self）不进事实区，但进独立的「我说过的话」区。"""
     from recall import format_recall_block
 
     block = format_recall_block([
         make_item("我说了难听的话", "user_said", 0.9, subject="about_self")
     ])
-    assert block == ""
+    assert "你之前说过的话" in block
+    assert "我说了难听的话" in block
+    assert "关于他的事实" not in block   # 不能冒充用户的事实区
 
 
 def test_confirmed_guess_enters_facts_not_guesses():

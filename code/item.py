@@ -79,8 +79,8 @@ def is_valid(item):
     if conf is None or not (0 <= conf <= 1):
         return False
 
-    # 3. source 必须是四种之一
-    if item.get("source") not in ("user_said", "her_inference", "observed", "third_party"):
+    # 3. source 必须是五种之一
+    if item.get("source") not in ("user_said", "her_inference", "observed", "third_party", "self_said"):
         return False
 
     # 4. layer 必须是三种之一

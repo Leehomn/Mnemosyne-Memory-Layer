@@ -13,8 +13,8 @@ _PREFIX_NOISE = re.compile(
     r")+"
 )
 
-# 标签本身可能写成 [事实] 【事实】 [ 事实 ] **[事实]**
-_TAG = re.compile(r"^[\[【]\s*(事实|猜测)\s*[\]】]\s*[:：]?\s*")
+# 标签本身可能写成 [事实] 【事实】 [ 事实 ] **[事实]** 或 [我说]
+_TAG = re.compile(r"^[\[【]\s*(事实|猜测|我说)\s*[\]】]\s*[:：]?\s*")
 
 # 提示词里出现过的「示例文字 / 说明文字」，模型有时会原样抄进输出。
 # 这些不是用户真实记忆，一旦落库就是乱编——宁可漏记，不可乱记，直接丢弃。
@@ -99,7 +99,13 @@ def parse_reply(reply):
             continue
 
         source = "user_said" if tag == "事实" else "her_inference"
-        items.append({"text": text, "source": source, "evidence": evidence})
+        subject = "about_user"
+        if tag == "我说":
+            # AI 自己说过的话：来源是 self_said（自己说的，不是用户/观察/推断），
+            # 主体是 about_self（关于 AI 自己）。这是独立的一格，不能混进用户事实。
+            source = "self_said"
+            subject = "about_self"
+        items.append({"text": text, "source": source, "subject": subject, "evidence": evidence})
     return items
 
 def verify_grounding(llm, guess_text, evidence_episodes):
@@ -158,11 +164,12 @@ def reconstruct(llm, buffer, remember_func, now=None):
         now_line = f"【当前日期】这段对话发生在 {now}。下面提到的「昨天/今天/明天/下周/上周/前天/后天」等相对时间，请以这个日期为基准换算成绝对日期写进正文。\n\n"
     prompt = (
             now_line
-            + "下面是一段对话。你要从对话里，提炼出「对他这个人的新认识」。\n\n"
+            + "下面是一段对话。你要从对话里，提炼出「对他这个人的新认识」，以及「你（AI）自己说过、且他可能回头问的话」。\n\n"
             "【严格输出格式，必须遵守】\n"
-            "每行一条，只能以下面两种前缀开头，除此之外什么都不能有：\n"
+            "每行一条，只能以下面三种前缀开头，除此之外什么都不能有：\n"
             "[事实] 后面写：他明确说过的事\n"
             "[猜测] 后面写：你推断的、但没直说的事\n"
+            "[我说] 后面写：你（AI）自己说过、且他可能回头问的事（承诺、建议、你的自述、关系约定）\n"
             "没有新认识，就只输出一个词：无\n"
             "绝对不要写「有」「好的」等其他任何话，不要解释。\n\n"
             "【只记值得长期记的，按「人脑记什么」来取舍】\n"
@@ -178,7 +185,11 @@ def reconstruct(llm, buffer, remember_func, now=None):
             "5. 社会信息与人际关系（谁对他好、谁让他尴尬、他属于哪个群体）。\n"
             "6. 未完成的事、待办、没问出口的话（这些会反复出现，值得记）。\n"
             "7. 异常、违反预期、意外、转折点（开头、结尾、转折处记得更牢）。\n"
-            "8. 情绪高峰与身体感受（最紧张、最开心、最害怕的瞬间）——记「这条记忆当时情绪多强」，用来调制权重。\n\n"
+            "8. 情绪高峰与身体感受（最紧张、最开心、最害怕的瞬间）——记「这条记忆当时情绪多强」，用来调制权重。\n"
+            "9. 你（AI）自己说过、且他可能回头问的话——用 [我说] 前缀。\n"
+            "   - 例：你建议「理票先按日期分堆」、你答应「帮他记配方」、你自述「我叫小满」。\n"
+            "   - 只记「承诺 / 建议 / 自述 / 关系约定」这类有长期价值、他可能回头问的。\n"
+            "   - 寒暄、客套（「好嘞」「费腰吧」这类随口应和）不记——跟「临时状态不记」同一条红线。\n\n"
             "【不记的，只有这一类】\n"
             "纯常规、重复、无关的一次性杂讯（比如「今天吃了午饭」「路边有几棵树」这类没有长期价值、也不会影响未来判断的）。\n"
             "临时状态（「今天好累」「现在饿了」）本身不进长期记忆，但「它背后的处境/变化」（比如「他最近在找工作、压力大」）要记。\n\n"
@@ -212,7 +223,8 @@ def reconstruct(llm, buffer, remember_func, now=None):
         m_date = _DATE_PATTERN.search(text)
         if m_date:
             event_time = m_date.group(0)
-        result = remember_func(text, source=it["source"], event_time=event_time)
+        result = remember_func(text, source=it["source"], subject=it["subject"],
+                               event_time=event_time)
         if result is not None:   # 没被去重/没失败，才算「新增」
             added += 1
 
