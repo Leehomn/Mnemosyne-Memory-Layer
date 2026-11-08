@@ -132,3 +132,27 @@ def test_dimension_rule_in_prompt():
     assert "不同事实维度" in prompt
     assert "老曹生日是六月九号" in prompt
     assert "生日那天我发了条消息" in prompt
+
+
+def test_summarization_rule_in_prompt():
+    """提示词必须写清「概括/细化/从属不算冲突」。
+
+    三个倒退考点（没说完要跟进的事/约定欠账/没解释的矛盾）的病根：
+    find_conflicts 把「具体事实 → 被短句概括」误判成矛盾软删，
+    导致 50.9% 的记忆被标 deleted。提示词要明确告诉模型：
+    概括/压缩/侧面/从属细节不否定旧记忆，只有明确纠错或同维度不同答案才算冲突。
+    """
+    items = [
+        make_item("3-23 他肩膀发紧、脑子木", "user_said", 0.9),
+    ]
+    seen = []
+
+    def llm(prompt):
+        seen.append(prompt)
+        return "无"
+
+    find_conflicts(llm, "这两天他肩膀有点发紧", items)
+    prompt = seen[0]
+    assert "概括/细化/从属不算冲突" in prompt
+    assert "这两天他肩膀有点发紧" in prompt
+    assert "其实不是" in prompt
