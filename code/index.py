@@ -237,10 +237,13 @@ class Cognition:
         # 1. 筛选出「还没被消化过」的 episode（事件）
         #    墓碑（deleted）不能拿来归纳：否则已被反义推翻的旧事件会被
         #    重新捞起来总结，甚至反过来把「戒辣」这类最新事实又标死。
+        #    about_self（AI 自己说过的话）也不能拿来归纳：那是「关于 AI 自己」的，
+        #    不是「关于用户」的规律，混进去会污染「对他这个人的认识」。
         episodes = [m for m in items
                     if m.get("layer") == "episode"
                     and not m.get("digested")
-                    and not m.get("deleted")]
+                    and not m.get("deleted")
+                    and m.get("subject") != "about_self"]
 
         if not episodes:
             return 0

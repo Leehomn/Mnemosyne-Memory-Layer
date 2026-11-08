@@ -276,11 +276,16 @@ def consolidate(llm, episodes, remember_func, kind="state"):
     reply = llm(prompt)
     items = parse_reply(reply)
 
-    # 4. 写入：把 [事实] 的来源从 user_said 改成 observed
+    # 4. 写入：归纳出的来源要做映射
+    #    [事实] 的来源从 user_said 改成 observed（归纳的「事实」= 观察到的反复，不是原话）
+    #    [我说] 保持 self_said（AI 自己说过的身份不能丢，不能被误标成推断）
+    #    其余（[猜测]）标 her_inference
     added = 0
     for it in items:
         if it["source"] == "user_said":
             source = "observed"  # 归纳的「事实」= 观察到的反复，不是原话
+        elif it["source"] == "self_said":
+            source = "self_said"  # AI 自己说的保持身份，别降成推断
         else:
             source = "her_inference"
 

@@ -329,6 +329,37 @@ def test_consolidate_marks_state_and_digests(tmp_path):
     assert impression[0]["kind"] == "state"
 
 
+def test_consolidate_skips_self_said(tmp_path):
+    """AI 自己说过的话（about_self）不能被拿去归纳「用户的规律」。
+
+    否则 AI 的建议/自述会混进「对他这个人的认识」，污染归纳结果。
+    """
+    from index import Cognition
+
+    # 假模型：归纳时把喂进来的事件原样输出成 [事实]（除 about_self 外不该出现）
+    def fake_llm(prompt):
+        if "事件：" in prompt:
+            return "[事实] 他爱吃辣"
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 一条用户事件 + 一条 AI 自述事件
+    cog.remember("他说无辣不欢", source="user_said", layer="episode")
+    cog.remember("我建议他理票先按日期分堆", source="self_said", layer="episode",
+                 subject="about_self")
+
+    cog.consolidate()
+
+    # 归纳输入里不该包含 about_self 的条目——AI 自述事件不能被消化
+    items = load_items(cog.path)
+    self_said_episode = [m for m in items
+                         if m.get("subject") == "about_self"
+                         and m.get("layer") == "episode"]
+    # 它还在，且没被标 digested（没参与归纳）
+    assert self_said_episode and not self_said_episode[0].get("digested")
+
+
 def test_remember_skips_tombstone(tmp_path):
     """墓碑不能被去重合并：用户改口说回一条已被推翻的话，新话必须另起一条，
     而不是被吞进死记录里（否则召回时又被过滤，等于白说）。"""
