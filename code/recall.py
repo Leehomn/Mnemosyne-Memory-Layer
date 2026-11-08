@@ -1,6 +1,7 @@
 # recall.py —— 召回
 
 import re
+from datetime import datetime
 
 from decay import decayed_weight, days_since, effective_half_life
 
@@ -82,7 +83,7 @@ def format_recall_block(items):
     # 这段是要直接喂给模型的提示词，格式乱会削弱「事实/猜测」的分区感。
     return "\n\n".join(parts) + "\n\n用法：聊到相关再说，别主动复述。"
 
-def semantic_recall(llm, items, query):
+def semantic_recall(llm, items, query, now=None):
     """
     用模型综合判断：items 里哪些和 query 相关（含时间远近、含反义/过时）。
 
@@ -90,6 +91,7 @@ def semantic_recall(llm, items, query):
         llm   : 模型函数
         items : 记忆列表
         query : 当前对话（用户这句话）
+        now   : 今天的日期字符串（如 "2026-05-27"）。不传就用系统当前日期。
 
     返回：
         相关的记忆列表（可能为空）
@@ -98,6 +100,11 @@ def semantic_recall(llm, items, query):
     items = [m for m in items if not m.get("deleted")]
     if not items:
         return []
+
+    # 今天的日期：真实系统里就是「现在」，供模型理解查询里的相对时间词。
+    # 不传就用系统当前日期——这样真实对话里用户说「前天/上周」，模型能换算。
+    if now is None:
+        now = datetime.now().strftime("%Y-%m-%d")
 
     # 1. 把记忆编号 + 时间一起列出来
     lines = []
@@ -117,10 +124,13 @@ def semantic_recall(llm, items, query):
         "请判断哪些和「当前这句话」真正相关。\n\n"
         "记忆：\n" + lines_str + "\n\n"
         "当前这句话：「" + query + "」\n\n"
+        "今天的日期是 " + now + "。\n\n"
         "判断时注意：\n"
         "- 相关 = 语义上真正有关（不要只看字面重合）。\n"
         "- 尤其注意「反义/过时」：比如记忆是「他爱吃辣」，但现在说「他不吃辣了」，"
         "那么旧记忆「他爱吃辣」已过时，不要当作相关召回。\n"
+        "- 如果这句话里出现「前天/昨天/上周/下周」这类相对时间，"
+        "用上面的「今天的日期」换算成绝对日期，再去记忆里找对应日期的内容。\n"
         "- 时间近的优先于时间远的。\n\n"
         "只输出相关的编号（用逗号分隔，比如 0,2）。没有真正相关的就只输出一个词：无\n"
         "不要输出任何其他内容，不要解释。"

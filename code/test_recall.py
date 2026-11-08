@@ -74,6 +74,29 @@ def test_semantic_recall_none():
     assert result == []
 
 
+def test_semantic_recall_passes_today_date_to_prompt():
+    """召回提示词要自动带上「今天的日期」（系统当前日期），让模型能理解
+    查询里的相对时间词（前天/上周）。真人聊天也会说「前天」，所以这是真实需求：
+    模型得知道今天几号，才能把「前天」换算成对应日期。
+    """
+    from recall import semantic_recall
+
+    items = [make_item("他 2026-05-25 把迷迭香搬到窗边", "user_said", 0.9)]
+    seen = {}
+
+    def capture(prompt):
+        seen["prompt"] = prompt
+        return "无"
+
+    semantic_recall(capture, items, "帮我按前天算算")
+
+    from datetime import datetime
+    expected = datetime.now().strftime("%Y-%m-%d")
+
+    assert expected in seen["prompt"]          # 今天的日期（系统当前）进了提示词
+    assert "相对时间" in seen["prompt"]         # 有「把相对时间换算成绝对日期」的提示
+
+
 # ===== 新增：semantic_recall 的解析容错 =====
 
 def test_semantic_recall_fullwidth_comma():
