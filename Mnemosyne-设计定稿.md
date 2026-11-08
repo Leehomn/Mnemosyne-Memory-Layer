@@ -525,9 +525,12 @@ item = {
     "base_weight": 1.5,           # 初始权重，由峰值情绪强度决定
     "half_life": 14,              # 半衰期（天），按 layer 分层（见 7.2b）
     "hits": 0,                    # 被召回/被提及次数
-    "created_at": 1792816155000,  # 时间戳
+    "created_at": 1792816155000,  # 记住时间（系统时间戳，用于衰减）
+    "event_time": "2026-05-25",   # 事件发生的逻辑日期（可选，None=不涉及具体某天）
 }
 ```
+
+> **`event_time` 字段（2026-11-08 新增）**：`created_at` 回答「这条记忆**什么时候被记住**」（系统时间戳，驱动衰减/用进废退），`event_time` 回答「这条记忆讲的是**哪一天的事**」（逻辑日期，供按日期检索/排序/判断「这事是不是很久以前」）。两者正交，谁都不替代谁——衰减照旧看 `created_at`，日期检索看 `event_time`。老数据无此字段完全兼容（默认 `None`）。
 
 > **`subject` 字段（2026-10-28 新增，修 bug）**：`source` 回答「信息从哪来」，`subject` 回答「信息关于谁」——两个正交维度。
 > - `about_user`：关于用户（默认）
@@ -589,7 +592,7 @@ cognition-memory/
 │   ├── demo_semantic_recall.py  # 语义召回演示
 │   ├── demo_llm_verify.py    # 验证机制演示
 │   ├── config.json           # API key 配置（不写死在代码里，开源时排除）
-│   ├── test_*.py             # ✅ 测试（10 份，96 条）
+│   ├── test_*.py             # ✅ 测试（10 份，106 条）
 │   └── data/                 # items.json（运行时生成，不进版本库）
 
 # 待实现：
@@ -672,7 +675,9 @@ cognition-memory/
 
 - **流程**：对话 buffer → `llm(提示词)` → `parse_reply` 解析 `[事实]/[猜测]` → `remember_func` 写库。
 - **解耦设计**：`reconstruct(llm, buffer, remember_func, now=None)` 不绑定具体模型——`llm` 可为真模型或 mock，接 DeepSeek 只换 `llm` 函数。
-- **时间锚点**（2026-11-07 加）：`now` 参数可选，传了就在提示词开头拼「当前日期」，让模型把「下周三」「前天」这类相对时间换算成绝对日期写进正文，治「相对日期/时间题」漏记。不传则与旧版完全一致（向后兼容）。
+- **时间锚点（2026-11-07 加，2026-11-08 升级为 C1）**：`now` 参数可选，传了就在提示词开头拼「当前日期」，让模型把「下周三」「前天」这类相对时间换算成绝对日期写进正文，治「相对日期/时间题」漏记。不传则与旧版完全一致（向后兼容）。
+  - **C1 强化（2026-11-07）**：提示词里「带时间的事件」升级为「必须记 + 必须换算成绝对日期」；`reconstruct()` 写入循环加校验——正文若还留着相对时间词（`昨天/前天/下周三`…）却**没**换算成绝对日期，这条直接拦下不记（时间信息已坏，宁可漏记不可乱记）。
+  - **event_time 结构化（2026-11-08）**：`reconstruct()` 写库时用 `_DATE_PATTERN` 抠正文里的绝对日期，写进 `remember_func` 的 `event_time` 字段（抠不到传 `None`）。从此日期不只是埋在正文字符串里，可被结构化检索。
 - **解析规则**（`parse_reply`，严格、呼应 5.5）：
   - `[事实]xxx` → `source="user_said"`
   - `[猜测]xxx` → `source="her_inference"`
@@ -750,16 +755,16 @@ cognition-memory/
 
 ### 10.1 测试现状
 
-**96 条测试，10 份测试文件，全绿（0.1 秒）。**
+**106 条测试，10 份测试文件，全绿（0.1 秒）。**
 
 | 测试文件 | 条数 | 覆盖 |
 |---|---|---|
 | `test_decay.py` | 7 | 衰减公式、半衰期、用进废退、复习失败 |
-| `test_item.py` | 9 | 结构、校验、半衰期分层 |
+| `test_item.py` | 11 | 结构、校验、半衰期分层、event_time 字段 |
 | `test_store.py` | 3 | 读写、备份、无 BOM |
 | `test_source.py` | 5 | 来源映射 |
-| `test_recall.py` | 12 | 召回排序、格式化分区、语义召回解析、墓碑过滤 |
-| `test_reconstruct.py` | 11 | `parse_reply` 各种装饰容错、consolidate |
+| `test_recall.py` | 13 | 召回排序、格式化分区、语义召回解析、墓碑过滤 |
+| `test_reconstruct.py` | 18 | `parse_reply` 各种装饰容错、consolidate、时间换算校验、event_time 抠日期 |
 | `test_conflict.py` | 12 | 冲突检测、编号解析、无 item 不白调模型 |
 | `test_verify.py` | 15 | 四个函数全覆盖（judge_feedback 6 条、pick_verify_target 2 条） |
 | `test_index.py` | 20 | `Cognition` 各方法、合并增强、晋升、墓碑、软删除/真空清理 |
@@ -800,4 +805,4 @@ def fake_llm(prompt):
 
 ---
 
-> 文档状态：思想层与技术层均已同步至 2026-11-03 的实际代码。
+> 文档状态：思想层与技术层均已同步至 2026-11-08 的实际代码。

@@ -9,7 +9,7 @@
 
 ## 状态
 
-**核心机制已实现，可运行。** 10 个模块齐全，`pytest` 测试 96 条全部通过，已接入真实模型。
+**核心机制已实现，可运行。** 10 个模块齐全，`pytest` 测试 106 条全部通过，已接入真实模型。
 
 - 代码：`code/` 目录
 - 测试：`code/test_*.py`（10 份），运行 `python -m pytest` 全绿
@@ -40,7 +40,7 @@
 | 晋升 | state（动态表现）反复出现 ≥3 次 → trait（稳定内核，半衰期 60→3650 天） | `item.py` / `index.py` |
 | 夜间整合 | consolidate，事件 → 印象（`digested` 记账防重复归纳） | `reconstruct.py` / `index.py` |
 | 语义召回 | semantic_recall，用模型判断相关性（含时间远近、反义/过时识别） | `recall.py` |
-| **时间锚点** | `reconstruct` 的 `now` 参数，让模型把「下周三」「前天」换算成绝对日期写进记忆 | `reconstruct.py` |
+| **时间锚点** | `reconstruct` 的 `now` 参数，让模型把「下周三」「前天」换算成绝对日期写进记忆；相对时间没换算成绝对日期则拦下不记（C1）；日期结构化存进 `event_time` 字段 | `reconstruct.py` / `item.py` |
 | **冲突检测** | find_conflicts，新记忆推翻旧记忆时自动识别 | `conflict.py` |
 | **软删除 + 墓碑** | 被推翻的记忆标 `deleted` 而不真删，可追溯、可恢复 | `item.py` / `recall.py` / `index.py` |
 | **验证机制** | 两层触发：有不确定印象（规则）+ 用户敞开心扉（模型） | `verify.py` |
@@ -184,7 +184,7 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 ## 环境说明
 
 - **Python**：`python` = 3.13.15（`D:\python313`），pytest 装在这里
-- **跑测试**：在 `code/` 目录下 `python -m pytest`（96 passed）
+- **跑测试**：在 `code/` 目录下 `python -m pytest`（106 passed）
 - **依赖**：只有 `openai`（调 DeepSeek 用）；不接模型时纯标准库
 - **Git**：仓库在项目根目录，提交历史见 `git log`（部分 shell 里 `git.exe` 不在 PATH，需在 PyCharm 终端或配好 PATH 后使用）
 - **Python 环境待统一**：本机有 3.13（D 盘）和 3.14（AppData）两个 Python，建议找时间统一，避免依赖混乱

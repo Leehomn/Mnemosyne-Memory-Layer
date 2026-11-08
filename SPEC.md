@@ -2,8 +2,8 @@
 
 > 配套 `DESIGN.md`。这里写「长什么样」，不写「为什么这样」。
 >
-> **状态（2026-11-03）**：**已实施**，本文档已同步至实际 Python 代码。
-> 10 个模块、96 条测试全绿。
+> **状态（2026-11-08）**：**已实施**，本文档已同步至实际 Python 代码。
+> 10 个模块、106 条测试全绿。
 >
 > **历史说明**：本文件最初（2026-10-24）是给 **Node.js / `.mjs`** 写的规格。
 > 2026-10-25 技术选型改为 **Python**（理由：开发者正在学 Python，学以致用；
@@ -27,7 +27,8 @@
   "hits": 0,                    # 被想起的次数（decay 用它拉长半衰期）
   "base_weight": 1.0,           # 初始权重
   "half_life": 14,              # 半衰期（天）
-  "created_at": 1792816155.0,   # Unix 时间戳（秒，浮点）
+  "created_at": 1792816155.0,   # Unix 时间戳（秒，浮点）—— 记住时间（驱动衰减）
+  "event_time": "2026-05-25",   # 事件发生的逻辑日期（可选，None=不涉及具体某天）
   "subject": "about_user",      # about_user | about_self | about_us
   "kind": None,                 # trait | state（仅 impression 层用）
   "occurrences": 1,             # 反复出现的次数（去重合并时 +1）
@@ -81,7 +82,7 @@ code/
 ├── llm.py             DeepSeek 接入层
 └── index.py           统一入口 Cognition 类
 
-测试（10 份，96 条）：
+测试（10 份，106 条）：
 test_decay / test_item / test_store / test_source / test_recall
 test_reconstruct / test_conflict / test_consolidate / test_verify / test_index
 
@@ -293,7 +294,7 @@ def semantic_recall(llm, items, query)  # 用模型判断相关性
 
 ### 6.1 现状
 
-**96 条测试，10 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
+**106 条测试，10 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
 分布见 `Mnemosyne-设计定稿.md` §10.1。
 
 ### 6.2 禁止的测试写法（红线）
