@@ -55,7 +55,11 @@ class Cognition:
         items = load_items(self.path)
 
         # —— 反证检测：新记忆和旧记忆冲突时，把旧的标失效 ——
-        if self.llm is not None and items:
+        # 只有「用户亲口说的新事实」（user_said）才有资格推翻旧记忆。
+        # observed（归纳的「事实」）/ her_inference（推测）是概括或推断，
+        # 它们没资格去推翻另一条记忆——否则「印象 vs 印象」会互相误判冲突、
+        # 互相软删，把 50.9% 的记忆都标成墓碑（正是三个倒退考点的根因）。
+        if self.llm is not None and items and source == "user_said":
             from conflict import find_conflicts
             conflicts = find_conflicts(self.llm, text, items)
             for old in conflicts:

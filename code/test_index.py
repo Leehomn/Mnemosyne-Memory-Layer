@@ -175,6 +175,43 @@ def test_conflict_marks_deleted(tmp_path):
     assert chila[0]["superseded_by"] == "我不吃辣了"  # 记录了被谁推翻
 
 
+def test_inference_does_not_trigger_conflict(tmp_path):
+    """归纳的印象（observed/her_inference）之间不互相判冲突。
+
+    这是「印象 vs 印象」误删的根因：consolidate 归纳出的概括/推测，
+    会被 find_conflicts 拿去和别的印象比对，互相判冲突软删，把 50.9%
+    的记忆都标成墓碑。只有 user_said（用户亲口说的）才有资格推翻旧记忆，
+    observed/her_inference 是概括或推断，没资格推翻另一条记忆。
+    """
+    from index import Cognition
+
+    calls = []
+
+    def fake_llm(prompt):
+        calls.append(prompt)
+        # 若真的调了冲突检测，返回「0」会把第 0 条标墓碑
+        return "0"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 先有一条印象
+    cog.remember("他最近心思被图纸占据，容易焦虑失眠",
+                 source="her_inference", layer="impression", kind="state")
+
+    # 又归纳出一条不同角度但同话题的印象 → 不该触发冲突检测
+    cog.remember("他近期有图纸相关的工作任务，但处于松弛期",
+                 source="observed", layer="impression", kind="state")
+
+    # 关键：find_conflicts 压根不该被调用（无「语义冲突」提示词）
+    assert not any("推翻" in p for p in calls), "归纳的印象不该触发冲突检测"
+
+    # 两条印象都应该活着，没有谁被标墓碑
+    from store import load_items
+    items = load_items(cog.path)
+    assert all(not m.get("deleted") for m in items)
+    assert len(items) == 2
+
+
 # ===== 链路测试：模块单独测都对，接起来会不会断电 =====
 
 def test_guess_gets_low_confidence(tmp_path):
