@@ -2,6 +2,40 @@
 
 import re
 
+# 冲突检测前的话题粗筛：只留「和新话字面沾边」的旧记忆，再喂给模型细判。
+# 否则新话拿去和全库几千条比对，模型在超长列表里过拟合，把「狗叫瓦片」
+# 和「他肩膀紧」这种完全不相关的也判成冲突（P14 实测误删 1128 条）。
+# 阈值取低 + 上限取大，宁可多留不漏——漏判真冲突（旧事实继续当真）比
+# 多判几条（少删几条）危险得多，呼应「宁可少删，不可乱删」。
+_PRESELECT_MIN_JACCARD = 0.15   # 字面重合度门槛（很低，只砍「完全不沾边」的）
+_PRESELECT_MAX_ITEMS = 50       # 最多喂给模型细判的条数
+
+
+def _preselect(new_text, items):
+    """
+    话题粗筛：按 Jaccard 字面重合度，把 items 里和新话「完全不沾边」的砍掉，
+    只留可能相关的一小撮（最多 _PRESELECT_MAX_ITEMS 条），供模型细判冲突。
+
+    注意：这只做「第一道闸」——挡「字面完全不重合」的误删。字面沾边但
+    语义反义（「爱吃辣」vs「不吃辣了」）必须留给模型细判，这里不做语义。
+    """
+    scored = []
+    for m in items:
+        # 字符级重合：把两句话拆成字符集合算 Jaccard。
+        a = set(new_text)
+        b = set(m.get("text", ""))
+        if not a or not b:
+            jac = 0.0
+        else:
+            jac = len(a & b) / len(a | b)
+        scored.append((jac, m))
+
+    # 重合度 >= 门槛的才留；全部按重合度从高到低排，取前 N 条
+    scored = [(j, m) for j, m in scored if j >= _PRESELECT_MIN_JACCARD]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [m for j, m in scored[:_PRESELECT_MAX_ITEMS]]
+
+
 def find_conflicts(llm, new_text, items):
     """
     用模型判断：new_text 和 items 里哪些「语义冲突」（如「爱吃辣」vs「不吃辣了」）。
@@ -16,6 +50,13 @@ def find_conflicts(llm, new_text, items):
     """
     # 过滤掉已失效的
     items = [m for m in items if not m.get("deleted")]
+    if not items:
+        return []
+
+    # —— 话题约束（写入侧）：先粗筛，只留和新话可能相关的旧记忆 ——
+    # 否则「狗叫瓦片」这种新话会拿去和「他肩膀紧」等全库几千条比对，
+    # 模型过拟合乱判冲突、误删大量无关记忆（见模块顶部注释）。
+    items = _preselect(new_text, items)
     if not items:
         return []
 

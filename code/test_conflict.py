@@ -1,13 +1,14 @@
 # test_conflict.py —— 测试冲突检测
 
-from conflict import find_conflicts
+from conflict import find_conflicts, _preselect
 from item import make_item
 
 
 def _items():
+    # 两条字面都和「吃辣/饮食」沾边，粗筛不会砍掉，编号解析测试才能独立验证。
     return [
         make_item("他爱吃辣", "user_said", 0.9),
-        make_item("他喜欢篮球", "user_said", 0.9),
+        make_item("他爱吃火锅", "user_said", 0.9),
     ]
 
 
@@ -18,14 +19,14 @@ def test_no_conflict():
 def test_semicolon_comma():
     """模型输出半角逗号（标准情况）。"""
     found = find_conflicts(lambda p: "0,1", "他不吃辣了", _items())
-    assert [m["text"] for m in found] == ["他爱吃辣", "他喜欢篮球"]
+    assert [m["text"] for m in found] == ["他爱吃辣", "他爱吃火锅"]
 
 
 def test_fullwidth_comma():
     """中文模型经常输出全角逗号。旧的 split(",") 会把整批冲突静默丢掉，
     旧记忆不标失效、继续当事实用 —— 直接撞「不可乱记」的红线。"""
     found = find_conflicts(lambda p: "0，1", "他不吃辣了", _items())
-    assert [m["text"] for m in found] == ["他爱吃辣", "他喜欢篮球"]
+    assert [m["text"] for m in found] == ["他爱吃辣", "他爱吃火锅"]
 
 
 def test_ideographic_comma():
@@ -60,9 +61,9 @@ def test_deleted_items_excluded():
     items = _items()
     items[0]["deleted"] = True          # 「他爱吃辣」已被推翻
 
-    # 过滤后只剩「他喜欢篮球」，编号 0 指向它 —— 不能是墓碑那条
-    found = find_conflicts(lambda p: "0", "新的话", items)
-    assert [m["text"] for m in found] == ["他喜欢篮球"]
+    # 过滤后只剩「他爱吃火锅」，编号 0 指向它 —— 不能是墓碑那条
+    found = find_conflicts(lambda p: "0", "他不吃辣了", items)
+    assert [m["text"] for m in found] == ["他爱吃火锅"]
 
 
 def test_all_deleted_skips_llm():
@@ -156,3 +157,50 @@ def test_summarization_rule_in_prompt():
     assert "概括/细化/从属不算冲突" in prompt
     assert "这两天他肩膀有点发紧" in prompt
     assert "其实不是" in prompt
+
+
+def test_preselect_drops_unrelated():
+    """话题粗筛：新话「狗叫瓦片」不该和「他肩膀紧」这类字面完全不沾边的旧话比对。
+
+    这是 P14 实测误删 1128 条的病根——find_conflicts 拿全库喂模型，
+    模型过拟合把「狗叫瓦片」和几乎所有旧话都判成冲突。
+    """
+    items = [
+        make_item("他肩膀发紧", "user_said", 0.9),
+        make_item("他的狗叫瓦片", "user_said", 0.9),
+    ]
+    got = _preselect("他养了狗叫瓦片", items)
+    texts = [m["text"] for m in got]
+    assert "他的狗叫瓦片" in texts
+    assert "他肩膀发紧" not in texts
+
+
+def test_preselect_keeps_related():
+    """字面沾边的旧话要留下（哪怕语义是反义，也得交给模型细判，不能粗筛砍掉）。"""
+    items = [
+        make_item("他爱吃辣", "user_said", 0.9),
+        make_item("他喜欢篮球", "user_said", 0.9),
+    ]
+    got = _preselect("他不吃辣了", items)
+    texts = [m["text"] for m in got]
+    assert "他爱吃辣" in texts
+
+
+def test_preselect_empty_when_no_overlap():
+    """完全不沾边时返回空，find_conflicts 不该再调模型。"""
+    items = [
+        make_item("他肩膀发紧", "user_said", 0.9),
+    ]
+    calls = []
+    found = find_conflicts(lambda p: calls.append(p) or "0", "他的狗叫瓦片", items)
+    assert found == []
+    assert calls == []
+
+
+def test_preselect_limits_to_max():
+    """超过上限时只取重合度最高的前 N 条，不把全库塞给模型。"""
+    items = [
+        make_item(f"他喜欢运动{i}", "user_said", 0.9) for i in range(100)
+    ]
+    got = _preselect("他喜欢运动", items)
+    assert len(got) <= 50
