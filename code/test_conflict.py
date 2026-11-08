@@ -109,3 +109,26 @@ def test_state_does_not_overthrow_trait():
     # 假模型：收到带「长期习惯/嗜好」标注的提示词，判断「他最近戒辣」是状态变化 → 无冲突
     found = find_conflicts(lambda p: "无", "他最近戒辣了", items)
     assert found == []
+
+
+def test_dimension_rule_in_prompt():
+    """提示词必须写清「不同事实维度不算冲突」，并用生日这个实际踩过的坑做例子。
+
+    生日 4 题全灭的根因：模型把「老曹生日是六月九号」（日期维度）和
+    「生日那天发了消息」（行为维度）误判成同一事实的更新，软删了日期。
+    提示词要明确告诉模型：只有「同一维度给出不同答案」才算冲突。
+    """
+    items = [
+        make_item("他记得老曹的生日是六月九号", "user_said", 0.9),
+    ]
+    seen = []
+
+    def llm(prompt):
+        seen.append(prompt)
+        return "无"
+
+    find_conflicts(llm, "老曹生日那天他发了条消息", items)
+    prompt = seen[0]
+    assert "不同事实维度" in prompt
+    assert "老曹生日是六月九号" in prompt
+    assert "生日那天我发了条消息" in prompt
