@@ -134,6 +134,36 @@ def test_semantic_recall_excludes_deleted():
     assert [m["text"] for m in result] == ["他叫南风"]
 
 
+def test_semantic_recall_caps_items_fed_to_model():
+    """语义召回前按权重取 top-N，不把全库几千条一次性喂给模型。
+
+    全库喂模型会过拟合漏判（P14 实测 3057 条），但也不能用字面粗筛
+    （会砍掉语义相关但字面不沾边的记忆）。所以用「权重 top-N」做上限保护：
+    只牺牲沉底的记忆，不牺牲语义召回的能力。
+    """
+    from recall import semantic_recall, _SEMANTIC_RECALL_PRESELECT_LIMIT
+
+    # 造 150 条，超过上限 100
+    items = [make_item(f"他喜欢运动{i}", "user_said", 0.9) for i in range(150)]
+    # 给最后一条超低权重，确认它被 top-N 砍掉（进不了模型）
+    items[-1]["base_weight"] = 0.01
+    items[-1]["half_life"] = 1
+
+    seen = {}
+
+    def capture(prompt):
+        seen["prompt"] = prompt
+        return "无"
+
+    semantic_recall(capture, items, "今天聊点别的")
+    prompt = seen["prompt"]
+
+    # 提示词里列出的记忆编号最多 100 条（0..99）
+    import re
+    ids = [int(t) for t in re.findall(r"^\d+", prompt, flags=re.M)]
+    assert len(ids) <= _SEMANTIC_RECALL_PRESELECT_LIMIT
+
+
 # ===== 新增：format_recall_block 的格式 =====
 
 def test_format_recall_block_structure():

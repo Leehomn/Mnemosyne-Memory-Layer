@@ -264,12 +264,14 @@ def test_semantic_recall_bumps_hits(tmp_path):
         if "语义冲突" in prompt:
             return "无"          # 冲突检测：无冲突
         if "今天吃什么" in prompt:
-            return "0"           # 召回：只命中「我爱吃辣」（第 0 条）
+            return "0"           # 召回：只命中第 0 条
         return "无"
 
     cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
-    cog.remember("我爱吃辣", source="user_said")
-    cog.remember("我喜欢打篮球", source="user_said")
+    # 让「我爱吃辣」置信度更高，确保它按权重排序后仍在第 0 位
+    # （语义召回前会先按权重取 top-N，权重相等时顺序不保证稳定）。
+    cog.remember("我爱吃辣", source="user_said", confidence=0.95)
+    cog.remember("我喜欢打篮球", source="user_said", confidence=0.5)
 
     cog.semantic_recall_block("今天吃什么", limit=5)
 
