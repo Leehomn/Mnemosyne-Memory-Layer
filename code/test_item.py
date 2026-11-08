@@ -63,3 +63,15 @@ def test_impression_kind_subdivides_half_life():
 
     assert trait["half_life"] == 3650   # 稳定内核：近乎永久
     assert state["half_life"] == 60     # 动态表现：两个月
+
+
+def test_event_time_defaults_to_none():
+    # 不传 event_time 时，默认 None（老数据兼容，无该字段也不崩）
+    item = make_item("他胃疼", "user_said", 0.9)
+    assert item["event_time"] is None
+
+
+def test_event_time_stored_when_passed():
+    # 显式传 event_time 时，原样存下
+    item = make_item("他 2026-05-25 搬花", "user_said", 0.9, event_time="2026-05-25")
+    assert item["event_time"] == "2026-05-25"

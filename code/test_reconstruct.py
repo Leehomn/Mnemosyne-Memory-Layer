@@ -156,6 +156,39 @@ def test_no_time_word_is_kept():
     assert added == 1
 
 
+def test_event_time_extracted_from_date():
+    """正文里的绝对日期要结构化抠出来，写进 event_time。"""
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["event_time"] = kwargs.get("event_time")
+        return "ok"
+
+    reconstruct(
+        lambda p: "[事实] 他 2026-05-25 把迷迭香搬到窗边",
+        ["用户：前天把迷迭香搬到窗边"],
+        remember,
+        now="2026-05-27",
+    )
+    assert captured["event_time"] == "2026-05-25"
+
+
+def test_event_time_none_without_date():
+    """正文里没有日期时，event_time 传 None（表示不涉及具体某天）。"""
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["event_time"] = kwargs.get("event_time")
+        return "ok"
+
+    reconstruct(
+        lambda p: "[事实] 他重感情",
+        ["用户：我很重感情"],
+        remember,
+    )
+    assert captured["event_time"] is None
+
+
 def fake_llm(prompt):
     return "[事实] 他叫南风\n[猜测] 他可能喜欢打游戏"
 

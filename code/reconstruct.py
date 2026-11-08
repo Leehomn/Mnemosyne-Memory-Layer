@@ -204,7 +204,15 @@ def reconstruct(llm, buffer, remember_func, now=None):
         # 记一个「下周三」这种基准已丢的半截时间，比不记更害人。宁可漏记，不可乱记。
         if _HAS_RELATIVE.search(text) and not _DATE_PATTERN.search(text):
             continue
-        result = remember_func(text, source=it["source"])
+        # —— 把正文里的绝对日期结构化抠出来，写进 event_time ——
+        # 正文里「他 2026-05-25 搬花」这类日期，是这条记忆描述的事件发生的逻辑日期。
+        # 存成独立字段，以后可以按日期检索/排序，而不是只埋在正文字符串里。
+        # 抠不到日期就传 None（表示这条记忆不涉及具体某天，比如纯特质「他重感情」）。
+        event_time = None
+        m_date = _DATE_PATTERN.search(text)
+        if m_date:
+            event_time = m_date.group(0)
+        result = remember_func(text, source=it["source"], event_time=event_time)
         if result is not None:   # 没被去重/没失败，才算「新增」
             added += 1
 
