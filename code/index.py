@@ -118,13 +118,15 @@ class Cognition:
         top = recall(items, limit=limit)
         return format_recall_block(top)
 
-    def semantic_recall_block(self, query, limit=8):
+    def semantic_recall_block(self, query, limit=8, now=None):
         """
         语义召回：用模型判断哪些记忆和 query 相关，再格式化。
 
         参数：
             query : 当前对话（用户这句话）
             limit : 最多召回几条
+            now   : 今天的日期字符串（如 "2026-05-27"），不传就用系统当前日期。
+                    供语义召回把查询里的相对时间词（前天/上周）换算成绝对日期。
 
         返回：
             格式化文字；没有相关记忆返回 ""
@@ -138,7 +140,7 @@ class Cognition:
             return self.recall_block(limit=limit)
 
         items = load_items(self.path)
-        related = semantic_recall(self.llm, items, query)
+        related = semantic_recall(self.llm, items, query, now=now)
         # 再按权重排序取前 limit
         top = recall(related, limit=limit)
 

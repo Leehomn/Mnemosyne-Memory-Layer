@@ -283,6 +283,26 @@ def test_semantic_recall_bumps_hits(tmp_path):
     assert basketball[0]["hits"] == 0
 
 
+def test_semantic_recall_block_forwards_now(tmp_path):
+    """语义召回块的 now 参数要透传给 semantic_recall，写进「今天的日期」。
+
+    虚拟时间（跑基准时题目的 now）就靠这个透传进召回提示词，
+    让模型能把查询里的「前天/上周」换算成绝对日期。不传则回退系统今天。
+    """
+    seen = {}
+
+    def fake_llm(prompt):
+        seen["prompt"] = prompt
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+    cog.remember("他 2026-05-25 把迷迭香搬到窗边", source="user_said")
+
+    cog.semantic_recall_block("迷迭香是哪天搬的", limit=5, now="2026-05-27")
+
+    assert "今天的日期是 2026-05-27" in seen["prompt"]
+
+
 def test_consolidate_marks_state_and_digests(tmp_path):
     """夜间整合出来的印象 kind 必须是 state；事件消化过就不该再被吃一遍。
 
