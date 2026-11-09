@@ -525,7 +525,7 @@ Python 里存「一条带多个字段的记录」，最自然的方式是 **字�
 
 ```python
 item = {
-    "id": "lq8f3a-2b7c",          # 唯一标识
+    # 注意：`id` 是设计蓝图，实际代码没有实现——条目用 `text + created_at` 定位去重。
     "layer": "episode",           # episode | impression | relationship
     "text": "他胃疼那天我说了难听的，他回'你一点都不关心我'",
     "source": "user_said",        # user_said | her_inference | observed | third_party | self_said

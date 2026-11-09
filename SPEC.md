@@ -41,7 +41,7 @@
   "deleted_reason": None,       # 为什么失效，如「被新信息推翻」
   "superseded_by": None,        # 被哪条新记忆推翻
   "digested": False,            # 夜间整合是否已消化过
-  "confidence_reason": None,    # 置信度变更原因（verify 用）
+  "confidence_reason": None,    # 置信度变更原因（verify 用；非 make_item 出生字段，update_confidence 时动态写入）
 }
 ```
 
