@@ -3,7 +3,7 @@
 > 配套 `DESIGN.md`。这里写「长什么样」，不写「为什么这样」。
 >
 > **状态（2026-11-09）**：**已实施**，本文档已同步至实际 Python 代码。
-> 10 个模块、128 条测试全绿。
+> 11 个模块、137 条测试全绿。
 >
 > **历史说明**：本文件最初（2026-10-24）是给 **Node.js / `.mjs`** 写的规格。
 > 2026-10-25 技术选型改为 **Python**（理由：开发者正在学 Python，学以致用；
@@ -60,7 +60,7 @@
 code/
 ├── data/
 │   └── items.json          # 所有条目（单文件，便于备份）
-└── *.py                    # 10 个模块 + 测试 + demo
+└── *.py                    # 11 个模块 + 测试 + demo
 ```
 
 实际实现**没有** `sessions.json` 和 `audit/` 审计日志——这是原设计的过度设计，
@@ -72,7 +72,7 @@ code/
 
 ---
 
-## 2. 模块划分（实际 10 个模块）
+## 2. 模块划分（实际 11 个模块）
 
 ```
 code/
@@ -85,11 +85,13 @@ code/
 ├── conflict.py        冲突检测（反证修正·被动）
 ├── verify.py          验证机制（反证修正·主动）
 ├── llm.py             DeepSeek 接入层
+├── embed.py           语义向量（embedding）与余弦相似度（召回前粗筛）
 └── index.py           统一入口 Cognition 类
 
-测试（10 份，128 条）：
+测试（11 份，137 条）：
 test_decay / test_item / test_store / test_source / test_recall
 test_reconstruct / test_conflict / test_consolidate / test_verify / test_index
+test_embed
 
 demo：
 demo_1.py（无模型）、demo_semantic_recall.py、demo_llm_verify.py、chat_demo.py、chat-loop.py
@@ -107,7 +109,7 @@ demo_1.py（无模型）、demo_semantic_recall.py、demo_llm_verify.py、chat_d
 
 ```python
 class Cognition:
-    def __init__(self, data_dir="data", llm=None)
+    def __init__(self, data_dir="data", llm=None, embedder=None)
 
     # 记忆写入（冲突检测 → 去重合并增强 → 晋升）
     def remember(self, text, source, confidence=None, **kwargs)
@@ -195,8 +197,20 @@ class Cognition:
 def recall_by_hits(items, limit=8)   # 按 hits 排序（简单版）
 def recall(items, limit=8, now=None) # 按衰减后权重排序，过滤 deleted
 def format_recall_block(items)       # 格式化成注入文本
-def semantic_recall(llm, items, query)  # 用模型判断相关性
+def semantic_recall(llm, items, query, now=None, embedder=None, emb_map=None)  # 用模型判断相关性（可选向量粗筛）
 ```
+
+`embed.py` 提供向量与相似度：
+
+```python
+make_siliconflow_embedder(api_key, base_url, model)   # 文本 → 向量
+make_embedder_from_config()                           # 从 config.json 读 embedding 段
+cosine(a, b)                                          # 余弦相似度
+rank_by_similarity(query_vec, items, emb_map, limit)  # 按相似度降序取 top N
+embed_with_cache(embedder, texts, cache)              # 批量算向量 + 缓存
+```
+
+**语义粗筛**：`semantic_recall_block` 有 embedder 时，先算 query 向量、按余弦取 top `EMBED_TOP_K`（100）条，再让模型细判——把「全库几千条喂模型」砍到「100 条」，省 token 不丢语义相关（「吃鸡肉 → KFC」这种字面无关但语义相关的仍能召回）。向量只活在内存缓存、不写回 `items.json`。
 
 **格式化结果**（事实区和猜测区**物理隔离**，并给不同使用指令）：
 
@@ -304,7 +318,7 @@ def semantic_recall(llm, items, query)  # 用模型判断相关性
 
 ### 6.1 现状
 
-**128 条测试，10 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
+**137 条测试，11 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
 分布见 `Mnemosyne-设计定稿.md` §10.1。
 
 ### 6.2 禁止的测试写法（红线）

@@ -9,10 +9,10 @@
 
 ## 状态
 
-**核心机制已实现，可运行。** 10 个模块齐全，`pytest` 测试 128 条全部通过，已接入真实模型。
+**核心机制已实现，可运行。** 11 个模块齐全，`pytest` 测试 137 条全部通过，已接入真实模型。
 
 - 代码：`code/` 目录
-- 测试：`code/test_*.py`（10 份），运行 `python -m pytest` 全绿
+- 测试：`code/test_*.py`（11 份），运行 `python -m pytest` 全绿
 - 跑分：`benchmark/` 目录（第三方基准适配器 + 判官 + 成绩记录）
 - 版本管理：Git（仓库根在当前目录，分支 `master`）
 
@@ -41,13 +41,14 @@
 | 晋升 | state（动态表现）反复出现 ≥3 次 → trait（稳定内核，半衰期 60→3650 天） | `item.py` / `index.py` |
 | 夜间整合 | consolidate，事件 → 印象（`digested` 记账防重复归纳） | `reconstruct.py` / `index.py` |
 | 语义召回 | semantic_recall，用模型判断相关性（含时间远近、反义/过时识别） | `recall.py` |
+| **语义粗筛** | 召回前先算向量，按余弦相似度取 top K 再喂模型细判，把「全库几千条」砍到「top 100」，省 token 不丢语义相关 | `embed.py` / `recall.py` |
 | **时间锚点** | `reconstruct` 的 `now` 参数，让模型把「下周三」「前天」换算成绝对日期写进记忆；相对时间没换算成绝对日期则拦下不记（C1）；日期结构化存进 `event_time` 字段 | `reconstruct.py` / `item.py` |
 | **冲突检测** | find_conflicts，新记忆推翻旧记忆时自动识别；总原则「默认不删、宁可少删不可乱删」，只有明确纠错或同维度不同值才删 | `conflict.py` |
 | **软删除 + 墓碑** | 被推翻的记忆标 `deleted` 而不真删，可追溯、可恢复 | `item.py` / `recall.py` / `index.py` |
 | **结构化字段（为按人分库铺路）** | `who`（涉及谁）/ `what`（事实维度）/ `value`（具体值）/ `tier`（关系等级 0~3）四字段，写入时模型顺带吐标签，只存不筛 | `item.py` / `reconstruct.py` |
 | **验证机制** | 两层触发：有不确定印象（规则）+ 用户敞开心扉（模型） | `verify.py` |
 
-**10 个模块**：`decay` / `item` / `store` / `recall` / `source` / `reconstruct` / `conflict` / `verify` / `llm` / `index`
+**11 个模块**：`decay` / `item` / `store` / `recall` / `source` / `reconstruct` / `conflict` / `verify` / `llm` / `embed` / `index`
 
 > 注：`llm.py` 是模型接入层（不参与记忆逻辑）；`conflict.py` / `verify.py` 是「记忆修正」的被动与主动两半。
 
@@ -184,7 +185,7 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 ## 环境说明
 
 - **Python**：`python` = 3.13.15（`D:\python313`），pytest 装在这里
-- **跑测试**：在 `code/` 目录下 `python -m pytest`（128 passed）
+- **跑测试**：在 `code/` 目录下 `python -m pytest`（137 passed）
 - **依赖**：只有 `openai`（调 DeepSeek 用）；不接模型时纯标准库
 - **Git**：仓库在项目根目录，提交历史见 `git log`（部分 shell 里 `git.exe` 不在 PATH，需在 PyCharm 终端或配好 PATH 后使用）
 - **Python 环境待统一**：本机有 3.13（D 盘）和 3.14（AppData）两个 Python，建议找时间统一，避免依赖混乱
@@ -196,7 +197,7 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 | 局限 | 说明 | 缓解 |
 |---|---|---|
 | 冲突检测拿「全库」喂模型 | `find_conflicts` 不按话题缩小范围，把全部存活条目丢给模型判冲突，库越大越容易误删（P14 实测「狗叫瓦片」两条删了 1128 条无关记忆，占误删 88%） | 已加字面粗筛（82fbf0c），按 Jaccard 重合度挡掉「完全不沾边」的条目 |
-| 语义召回也拿「全库」喂模型 | `semantic_recall` 同样无话题预筛，库越大越慢越贵，模型在几千条里判相关也易漏 | 与上同源，待补话题粗筛 |
+| 语义召回也拿「全库」喂模型 | `semantic_recall` 同样无话题预筛，库越大越慢越贵，模型在几千条里判相关也易漏 | 已加 embedding 语义粗筛（204041c），先算向量取 top 100 再喂模型细判 |
 | 关系状态（亲密度）涨跌未实现 | 设计开放问题 #6，`relationship` 层只有半衰期，没有数值涨跌规则 | 有意的留白，暂缓 |
 | 去重用 Jaccard 按字拆分 | 看不出「爱吃辣 / 讨厌辣」的反义 | 语义召回用模型判断，已部分缓解 |
 | 验证机制少在真实对话里自然触发 | 需要有 `her_inference` 候选 + 用户敞开心扉 | 已放宽触发条件，但仍需更多真实对话打磨 |
