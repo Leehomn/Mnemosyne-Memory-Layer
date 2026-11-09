@@ -214,8 +214,8 @@ def semantic_recall(llm, items, query)  # 用模型判断相关性
 用法：聊到相关再说，别主动复述。
 ```
 
-**关键**：事实区要求 `source in (user_said, observed)` 且 `confidence >= 0.8`
-且 `subject != about_self`；猜测区只放 `her_inference`；「你之前说过的话」区放 `self_said`（`subject == about_self`）。
+**关键**：事实区要求 `confidence >= 0.8`（**不看 source**）且 `subject != about_self`
+——「被验证确认的猜测」（`her_inference` 升到 0.9）也进事实区当真，`third_party` 默认 0.5 进不了（靠置信度兜底）；猜测区只放 `her_inference` 且 `0.6 <= confidence < 0.8`；「你之前说过的话」区放 `self_said`（`subject == about_self`）。
 第一代的问题就是所有条目混在一起，模型分不清真假。
 
 **语义召回的「反义识别」**：`semantic_recall` 让模型判断相关性，

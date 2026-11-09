@@ -694,7 +694,8 @@ cognition-memory/
   | `third_party` | 0.5 | **转述（非证实）** |
   | `her_inference` | 0.4 | **猜测** |
 
-- **接口**：`default_confidence(source)` 查表；`is_confirmed(source)` 判断证实/猜测（**只认 user_said / observed / self_said，third_party 不算证实**——别人转述可能失真，呼应 5.1「禁止算到对话对象头上」）。事实区判断（`recall.py`）统一走 `is_confirmed`，不再各自硬编码来源元组。
+- **接口**：`default_confidence(source)` 查表；`is_confirmed(source)` 判断证实/猜测（**只认 user_said / observed / self_said，third_party 不算证实**——别人转述可能失真，呼应 5.1「禁止算到对话对象头上」）。
+- **事实区判断（`recall.py`）实际按「置信度」而非「来源」**：`format_recall_block` 里事实区 = `confidence >= 0.8` 且 `subject != "about_self"`（**不看 source**）。这样「被验证确认的猜测」（`her_inference` 升到 0.9）能进事实区当真，而 `third_party`（默认 0.5）碰巧进不了——靠置信度兜底，不是靠 `is_confirmed` 硬卡来源。（2026-11-09 修正：早期文档写「统一走 is_confirmed / source 元组」，与代码不符，已更正。）
 
 ### 7.7 事后重构（reconstruct.py，2026-10-31 实现，已接入真模型）
 
