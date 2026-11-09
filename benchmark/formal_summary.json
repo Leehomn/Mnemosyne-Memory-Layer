@@ -1,0 +1,133 @@
+{
+  "passed": 243,
+  "scored": 714,
+  "skipped": 0,
+  "by_tag": {
+    "生日": {
+      "passed": 20,
+      "total": 40
+    },
+    "第三方事实": {
+      "passed": 39,
+      "total": 114
+    },
+    "纠错": {
+      "passed": 11,
+      "total": 48
+    },
+    "改口": {
+      "passed": 7,
+      "total": 40
+    },
+    "相对日期": {
+      "passed": 2,
+      "total": 44
+    },
+    "时间题": {
+      "passed": 1,
+      "total": 48
+    },
+    "称呼条件": {
+      "passed": 6,
+      "total": 48
+    },
+    "带条件或期限的偏好和边界": {
+      "passed": 26,
+      "total": 59
+    },
+    "边界": {
+      "passed": 38,
+      "total": 68
+    },
+    "约定和欠账": {
+      "passed": 18,
+      "total": 55
+    },
+    "用户的基本信息": {
+      "passed": 25,
+      "total": 56
+    },
+    "资料不足": {
+      "passed": 31,
+      "total": 56
+    },
+    "没解释的矛盾": {
+      "passed": 5,
+      "total": 47
+    },
+    "偏好": {
+      "passed": 27,
+      "total": 66
+    },
+    "分散的线索": {
+      "passed": 11,
+      "total": 56
+    },
+    "职业": {
+      "passed": 21,
+      "total": 51
+    },
+    "时间约定": {
+      "passed": 8,
+      "total": 43
+    },
+    "敏感的事": {
+      "passed": 26,
+      "total": 40
+    },
+    "共同编的故事": {
+      "passed": 11,
+      "total": 43
+    },
+    "没说完要跟进的事": {
+      "passed": 28,
+      "total": 42
+    },
+    "计划": {
+      "passed": 21,
+      "total": 65
+    },
+    "计划假设梦转述猜测": {
+      "passed": 22,
+      "total": 65
+    },
+    "转述": {
+      "passed": 13,
+      "total": 44
+    },
+    "相似事件": {
+      "passed": 10,
+      "total": 40
+    },
+    "假设": {
+      "passed": 13,
+      "total": 49
+    },
+    "助手自己说过的话": {
+      "passed": 5,
+      "total": 58
+    },
+    "真实变化": {
+      "passed": 14,
+      "total": 58
+    }
+  },
+  "by_interval": {
+    "0": {
+      "passed": 78,
+      "total": 189
+    },
+    "3": {
+      "passed": 60,
+      "total": 184
+    },
+    "15": {
+      "passed": 57,
+      "total": 174
+    },
+    "45": {
+      "passed": 48,
+      "total": 167
+    }
+  }
+}

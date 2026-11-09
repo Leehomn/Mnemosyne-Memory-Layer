@@ -1,0 +1,121 @@
+{
+  "passed": 63,
+  "scored": 82,
+  "skipped": 0,
+  "by_tag": {
+    "资料不足": {
+      "passed": 10,
+      "total": 16
+    },
+    "没说完要跟进的事": {
+      "passed": 6,
+      "total": 6
+    },
+    "共同编的故事": {
+      "passed": 7,
+      "total": 8
+    },
+    "约定和欠账": {
+      "passed": 3,
+      "total": 3
+    },
+    "真实变化": {
+      "passed": 3,
+      "total": 3
+    },
+    "计划": {
+      "passed": 7,
+      "total": 7
+    },
+    "没解释的矛盾": {
+      "passed": 3,
+      "total": 8
+    },
+    "用户的基本信息": {
+      "passed": 3,
+      "total": 3
+    },
+    "职业": {
+      "passed": 3,
+      "total": 3
+    },
+    "生日": {
+      "passed": 4,
+      "total": 4
+    },
+    "带条件或期限的偏好和边界": {
+      "passed": 5,
+      "total": 13
+    },
+    "边界": {
+      "passed": 1,
+      "total": 4
+    },
+    "假设": {
+      "passed": 6,
+      "total": 8
+    },
+    "计划假设梦转述猜测": {
+      "passed": 9,
+      "total": 12
+    },
+    "时间约定": {
+      "passed": 4,
+      "total": 7
+    },
+    "称呼条件": {
+      "passed": 1,
+      "total": 1
+    },
+    "相对日期": {
+      "passed": 4,
+      "total": 4
+    },
+    "时间题": {
+      "passed": 4,
+      "total": 4
+    },
+    "转述": {
+      "passed": 3,
+      "total": 4
+    },
+    "相似事件": {
+      "passed": 3,
+      "total": 4
+    },
+    "偏好": {
+      "passed": 4,
+      "total": 6
+    },
+    "第三方事实": {
+      "passed": 6,
+      "total": 6
+    },
+    "纠错": {
+      "passed": 4,
+      "total": 4
+    },
+    "助手自己说过的话": {
+      "passed": 1,
+      "total": 1
+    }
+  },
+  "by_interval": {
+    "0": {
+      "passed": 23,
+      "total": 27
+    },
+    "3": {
+      "passed": 16,
+      "total": 21
+    },
+    "15": {
+      "passed": 12,
+      "total": 18
+    },
+    "45": {
+      "passed": 12,
+      "total": 16
+    }
+  }
+}
