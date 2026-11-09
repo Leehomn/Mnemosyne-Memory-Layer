@@ -21,6 +21,7 @@ sys.path.insert(0, MNEMOSYNE_CODE)
 from llm import make_deepseek_llm
 from index import Cognition
 from reconstruct import reconstruct
+from embed import make_embedder_from_config
 
 BENCH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                      "chat-memory-benchmark-main")
@@ -79,6 +80,7 @@ def main():
     args = ap.parse_args()
 
     llm = make_deepseek_llm()
+    embedder = make_embedder_from_config()
 
     # 启动时读已有结果做跳过集（断点续跑：已答过的题不再重答）
     done = set()
@@ -119,7 +121,7 @@ def main():
             continue
         # 每个人物独立记忆库（防认错人）
         data_dir = os.path.join(args.data_root, persona)
-        cog = Cognition(data_dir=data_dir, llm=llm)
+        cog = Cognition(data_dir=data_dir, llm=llm, embedder=embedder)
 
         # 按 cutoff_turn 分组
         by_cutoff = defaultdict(list)

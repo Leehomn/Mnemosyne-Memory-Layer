@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 
 from decay import decayed_weight, days_since, effective_half_life
+from embed import rank_by_similarity, EMBED_TOP_K
 
 
 def recall(items, limit=8, now=None):
@@ -92,15 +93,19 @@ def format_recall_block(items):
     # 这段是要直接喂给模型的提示词，格式乱会削弱「事实/猜测」的分区感。
     return "\n\n".join(parts) + "\n\n用法：聊到相关再说，别主动复述。"
 
-def semantic_recall(llm, items, query, now=None):
+def semantic_recall(llm, items, query, now=None, embedder=None, emb_map=None):
     """
     用模型综合判断：items 里哪些和 query 相关（含时间远近、含反义/过时）。
 
     参数：
-        llm   : 模型函数
-        items : 记忆列表
-        query : 当前对话（用户这句话）
-        now   : 今天的日期字符串（如 "2026-05-27"）。不传就用系统当前日期。
+        llm      : 模型函数
+        items    : 记忆列表
+        query    : 当前对话（用户这句话）
+        now      : 今天的日期字符串（如 "2026-05-27"）。不传就用系统当前日期。
+        embedder : 可选。语义向量函数 embed(text)->vector，用于粗筛。
+        emb_map  : 可选。{text: vector} 缓存，配合 embedder 用。
+                   传了 embedder 就先「算 query 向量 → 余弦取 top K」，再让模型细判；
+                   不传则退回「全库喂模型」（老行为，向后兼容）。
 
     返回：
         相关的记忆列表（可能为空）
@@ -114,6 +119,17 @@ def semantic_recall(llm, items, query, now=None):
     # 不传就用系统当前日期——这样真实对话里用户说「前天/上周」，模型能换算。
     if now is None:
         now = datetime.now().strftime("%Y-%m-%d")
+
+    # —— 语义粗筛：先按向量相似度取 top K，再让模型细判 ——
+    # 全库几千条直接喂模型，token 爆炸（P14 实测一次召回喂 4 万字）；
+    # 先算 query 向量，只留语义最相关的 EMBED_TOP_K 条，把喂给模型的量砍掉 90%+。
+    # 注意：向量粗筛只做「缩小范围」，不砍「反义/过时」——「他爱吃辣」和
+    # 「他不吃辣了」语义相关、向量天然接近，粗筛会保留，交给模型细判。
+    if embedder is not None and emb_map is not None:
+        qvec = embedder(query)
+        items = rank_by_similarity(qvec, items, emb_map, limit=EMBED_TOP_K)
+        if not items:
+            return []
 
     # 1. 把记忆编号 + 时间一起列出来
     lines = []

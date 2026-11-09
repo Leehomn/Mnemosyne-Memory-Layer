@@ -6,6 +6,7 @@ from item import make_item, is_valid
 from store import save_items, load_items
 from recall import recall, format_recall_block, semantic_recall
 from source import default_confidence
+from embed import embed_with_cache
 
 # 墓碑（软删除）在库里最多躺多少天，之后被真空清理（物理删除）。
 # 软删除保证「刚过期的还能找回」，真空清理保证「死人不会越堆越多」。
@@ -35,13 +36,19 @@ class Cognition:
         cog.maintain()
     """
 
-    def __init__(self, data_dir="data", llm=None):
+    def __init__(self, data_dir="data", llm=None, embedder=None):
         """
-        初始化：指定数据目录，可选传入模型函数（用于语义召回）。
+        初始化：指定数据目录，可选传入模型函数（用于语义召回），
+        可选传入语义向量函数（用于召回前的粗筛）。
+
+        embedder：embed(text) -> vector 或 embed([...]) -> [vector...]。
+        传入后，semantic_recall_block 会先用向量把全库缩到 top K 再喂模型，
+        省 token；不传则退回「全库喂模型」的老行为（向后兼容）。
         """
         self.data_dir = data_dir
         self.path = data_dir.rstrip("/") + "/items.json"
         self.llm = llm
+        self.embedder = embedder
 
     def remember(self, text, source, confidence=None, **kwargs):
         # 不传置信度 → 按来源自动取（user_said 0.9 / observed 0.8 /
@@ -140,7 +147,17 @@ class Cognition:
             return self.recall_block(limit=limit)
 
         items = load_items(self.path)
-        related = semantic_recall(self.llm, items, query, now=now)
+
+        # —— 语义向量粗筛：有 embedder 时，先回填记忆向量、缩到 top K 再喂模型 ——
+        # 向量缓存（text -> vector）只活在内存里，不写回 items.json，
+        # 避免把 1024 维浮点数组塞进用户可见的记忆库 JSON。
+        emb_map = None
+        if self.embedder is not None:
+            texts = [m["text"] for m in items]
+            emb_map = embed_with_cache(self.embedder, texts, {})
+
+        related = semantic_recall(self.llm, items, query, now=now,
+                                  embedder=self.embedder, emb_map=emb_map)
         # 再按权重排序取前 limit
         top = recall(related, limit=limit)
 
