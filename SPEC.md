@@ -3,7 +3,7 @@
 > 配套 `DESIGN.md`。这里写「长什么样」，不写「为什么这样」。
 >
 > **状态（2026-11-09）**：**已实施**，本文档已同步至实际 Python 代码。
-> 11 个模块、137 条测试全绿。
+> 11 个模块、138 条测试全绿。
 >
 > **历史说明**：本文件最初（2026-10-24）是给 **Node.js / `.mjs`** 写的规格。
 > 2026-10-25 技术选型改为 **Python**（理由：开发者正在学 Python，学以致用；
@@ -88,7 +88,7 @@ code/
 ├── embed.py           语义向量（embedding）与余弦相似度（召回前粗筛）
 └── index.py           统一入口 Cognition 类
 
-测试（11 份，137 条）：
+测试（11 份，138 条）：
 test_decay / test_item / test_store / test_source / test_recall
 test_reconstruct / test_conflict / test_consolidate / test_verify / test_index
 test_embed
@@ -318,7 +318,7 @@ embed_with_cache(embedder, texts, cache)              # 批量算向量 + 缓存
 
 ### 6.1 现状
 
-**137 条测试，11 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
+**138 条测试，11 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
 分布见 `Mnemosyne-设计定稿.md` §10.1。
 
 ### 6.2 禁止的测试写法（红线）

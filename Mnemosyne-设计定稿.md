@@ -7,7 +7,7 @@
 > - 第一部分「思想与机制」——记录**为什么**这么设计（给人看）
 > - 第二部分「技术规格」——记录**怎么**实现（给代码看）
 >
-> 状态：思想层已定稿，技术层已同步至实际代码（2026-11-09：11 模块 / 137 测试）。
+> 状态：思想层已定稿，技术层已同步至实际代码（2026-11-09：11 模块 / 138 测试）。
 >
 > **技术选型（2026-10-25 定）**：本项目用 **Python** 实现（原方案文档中的 Node.js/`.mjs` 仅为原作者的环境选择，非项目约束）。理由：① 开发者正在学 Python，学以致用；② Python 是 AI/科研/「化学+AI」方向的主流语言；③ 大模型 SDK 生态 Python 最成熟。
 
@@ -617,7 +617,7 @@ cognition-memory/
 │   ├── demo_semantic_recall.py  # 语义召回演示
 │   ├── demo_llm_verify.py    # 验证机制演示
 │   ├── config.json           # API key 配置（不写死在代码里，开源时排除）
-│   ├── test_*.py             # ✅ 测试（11 份，137 条）
+│   ├── test_*.py             # ✅ 测试（11 份，138 条）
 │   └── data/                 # items.json（运行时生成，不进版本库）
 
 # 待实现：
@@ -783,7 +783,7 @@ cognition-memory/
 
 ### 10.1 测试现状
 
-**137 条测试，11 份测试文件，全绿（0.1 秒）。**
+**138 条测试，11 份测试文件，全绿（0.1 秒）。**
 
 | 测试文件 | 条数 | 覆盖 |
 |---|---|---|
@@ -795,7 +795,7 @@ cognition-memory/
 | `test_reconstruct.py` | 26 | `parse_reply` 各种装饰容错、`[我说]` 自述通道、consolidate、时间换算校验、event_time 抠日期、topic 标签、who/what/value/tier 标签 |
 | `test_conflict.py` | 18 | 冲突检测、编号解析、无 item 不白调模型、话题粗筛、三重护栏 |
 | `test_verify.py` | 15 | 四个函数全覆盖（judge_feedback 6 条、pick_verify_target 2 条） |
-| `test_index.py` | 23 | `Cognition` 各方法、合并增强、晋升、墓碑、软删除/真空清理、consolidate 排除自述、语义召回 now 透传 |
+| `test_index.py` | 24 | `Cognition` 各方法、合并增强、晋升、墓碑、软删除/真空清理、consolidate 排除自述、语义召回 now 透传、embedding 缓存复用 |
 | `test_consolidate.py` | 2 | 夜间整合（依据回溯校验） |
 | `test_embed.py` | 9 | cosine 同向/正交/零向量/维度不一致、rank_by_similarity 降序/跳过缺失向量/limit、embed_with_cache 分批与跳过、EMBED_TOP_K 常量 |
 

@@ -1,0 +1,133 @@
+{
+  "passed": 525,
+  "scored": 714,
+  "skipped": 0,
+  "by_tag": {
+    "生日": {
+      "passed": 38,
+      "total": 40
+    },
+    "第三方事实": {
+      "passed": 88,
+      "total": 114
+    },
+    "纠错": {
+      "passed": 45,
+      "total": 48
+    },
+    "改口": {
+      "passed": 36,
+      "total": 40
+    },
+    "相对日期": {
+      "passed": 22,
+      "total": 44
+    },
+    "时间题": {
+      "passed": 20,
+      "total": 48
+    },
+    "称呼条件": {
+      "passed": 45,
+      "total": 48
+    },
+    "带条件或期限的偏好和边界": {
+      "passed": 46,
+      "total": 59
+    },
+    "边界": {
+      "passed": 61,
+      "total": 68
+    },
+    "约定和欠账": {
+      "passed": 20,
+      "total": 55
+    },
+    "用户的基本信息": {
+      "passed": 44,
+      "total": 56
+    },
+    "资料不足": {
+      "passed": 37,
+      "total": 56
+    },
+    "没解释的矛盾": {
+      "passed": 13,
+      "total": 47
+    },
+    "偏好": {
+      "passed": 52,
+      "total": 66
+    },
+    "分散的线索": {
+      "passed": 24,
+      "total": 56
+    },
+    "职业": {
+      "passed": 40,
+      "total": 51
+    },
+    "时间约定": {
+      "passed": 23,
+      "total": 43
+    },
+    "敏感的事": {
+      "passed": 38,
+      "total": 40
+    },
+    "共同编的故事": {
+      "passed": 28,
+      "total": 43
+    },
+    "没说完要跟进的事": {
+      "passed": 30,
+      "total": 42
+    },
+    "计划": {
+      "passed": 44,
+      "total": 65
+    },
+    "计划假设梦转述猜测": {
+      "passed": 53,
+      "total": 65
+    },
+    "转述": {
+      "passed": 26,
+      "total": 44
+    },
+    "相似事件": {
+      "passed": 22,
+      "total": 40
+    },
+    "假设": {
+      "passed": 36,
+      "total": 49
+    },
+    "助手自己说过的话": {
+      "passed": 42,
+      "total": 58
+    },
+    "真实变化": {
+      "passed": 38,
+      "total": 58
+    }
+  },
+  "by_interval": {
+    "0": {
+      "passed": 143,
+      "total": 189
+    },
+    "3": {
+      "passed": 131,
+      "total": 184
+    },
+    "15": {
+      "passed": 128,
+      "total": 174
+    },
+    "45": {
+      "passed": 123,
+      "total": 167
+    }
+  }
+}
