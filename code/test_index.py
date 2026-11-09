@@ -303,6 +303,37 @@ def test_semantic_recall_block_forwards_now(tmp_path):
     assert "今天的日期是 2026-05-27" in seen["prompt"]
 
 
+def test_embed_cache_reused_across_recalls(tmp_path):
+    """embedder 缓存要活在整个 Cognition 实例里：同一个人物只向量化一次。
+
+    否则每次 semantic_recall_block 都传空 {}，同一批记忆被反复打向量，
+    跑基准时 82 题 = 82 次全库向量化，纯浪费 embedding 请求和时间。
+    """
+    calls = []
+
+    def fake_embedder(x):
+        calls.append(x)
+        if isinstance(x, str):
+            return [0.0, 0.0, 1.0]
+        return [[0.0, 0.0, 1.0] for _ in x]
+
+    def fake_llm(prompt):
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm, embedder=fake_embedder)
+    cog.remember("他 2026-05-25 把迷迭香搬到窗边", source="user_said")
+    cog.remember("他 2026-05-27 把迷迭香换到阴处", source="user_said")
+
+    cog.semantic_recall_block("迷迭香哪天搬的", limit=5)
+    # 第二次：记忆文本全命中缓存，embedder 只该被 query 调用一次（str），
+    # 不该再批量重算那 2 条记忆。
+    cog.semantic_recall_block("迷迭香哪天换的", limit=5)
+
+    batch_calls = [c for c in calls if isinstance(c, list)]
+    # 只有第一次召回时批量算过 2 条记忆；第二次全部命中缓存，批量调用为 0
+    assert len(batch_calls) == 1
+
+
 def test_consolidate_marks_state_and_digests(tmp_path):
     """夜间整合出来的印象 kind 必须是 state；事件消化过就不该再被吃一遍。
 

@@ -49,6 +49,10 @@ class Cognition:
         self.path = data_dir.rstrip("/") + "/items.json"
         self.llm = llm
         self.embedder = embedder
+        # 向量缓存（text -> vector），活在整个 Cognition 实例生命周期里。
+        # 同一个人物的记忆文本不变，向量就不用重算——82 题只算一次全库向量，
+        # 而不是每题都重新打 1790 次分。缓存只在内存，不写回 items.json。
+        self._emb_cache = {}
 
     def remember(self, text, source, confidence=None, **kwargs):
         # 不传置信度 → 按来源自动取（user_said 0.9 / observed 0.8 /
@@ -154,7 +158,7 @@ class Cognition:
         emb_map = None
         if self.embedder is not None:
             texts = [m["text"] for m in items]
-            emb_map = embed_with_cache(self.embedder, texts, {})
+            emb_map = embed_with_cache(self.embedder, texts, self._emb_cache)
 
         related = semantic_recall(self.llm, items, query, now=now,
                                   embedder=self.embedder, emb_map=emb_map)
