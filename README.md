@@ -13,6 +13,7 @@
 
 - 代码：`code/` 目录
 - 测试：`code/test_*.py`（10 份），运行 `python -m pytest` 全绿
+- 跑分：`benchmark/` 目录（第三方基准适配器 + 判官 + 成绩记录）
 - 版本管理：Git（仓库根在当前目录，分支 `master`）
 
 ---
