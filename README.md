@@ -161,8 +161,6 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 |---|---|
 | [Mnemosyne-设计定稿.md](Mnemosyne-设计定稿.md) | 完整设计（思想层 + 技术层），**最重要** |
 | [定位与参考.md](定位与参考.md) | 流派定位、学术地图、竞品分析 |
-| [复习总纲.md](复习总纲.md) | 全景复习 |
-| [方向锚点.md](方向锚点.md) | 心态锚点（焦虑时看） |
 | [SPEC.md](SPEC.md) | 早期技术规格（数据模型/接口，历史参考） |
 | [DESIGN.md](DESIGN.md) | 早期设计思路（历史参考） |
 | [NOTES-FROM-V1.md](NOTES-FROM-V1.md) | 第一代的实测教训与血泪坑（只读参考） |
