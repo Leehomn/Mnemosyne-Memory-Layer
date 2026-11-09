@@ -87,3 +87,22 @@ def test_topic_stored_when_passed():
     # 显式传 topic 时，原样存下
     item = make_item("他养了狗", "user_said", 0.9, topic="养狗")
     assert item["topic"] == "养狗"
+
+
+def test_who_what_value_default_to_none():
+    # 不传 who/what/value 时，默认 None（老数据兼容，无该字段也不崩）
+    item = make_item("他胃疼", "user_said", 0.9)
+    assert item["who"] is None
+    assert item["what"] is None
+    assert item["value"] is None
+    assert item["tier"] is None
+
+
+def test_who_what_value_stored_when_passed():
+    # 显式传 who/what/value 时，原样存下
+    item = make_item("老曹生日是六月九号", "user_said", 0.9,
+                     who="老曹", what="生日", value="六月九号", tier=2)
+    assert item["who"] == "老曹"
+    assert item["what"] == "生日"
+    assert item["value"] == "六月九号"
+    assert item["tier"] == 2

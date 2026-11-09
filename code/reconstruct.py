@@ -91,14 +91,58 @@ def parse_reply(reply):
             evidence = [int(x) for x in re.findall(r"\d+", ev_part)]
             text = text[:m_ev.start()].rstrip(" →-—、，,；;").strip()
 
-        # —— 拆出「话题」尾巴 ——
+                # —— 拆出「话题」尾巴 ——
         # 模型会写「[事实] 他养了狗 #话题：养狗」
-        # 把「#话题：X」从正文里切走，正文和话题标签分开存。
+        # 用 re.sub 把「#话题：X」从正文里删掉，话题词单独存。
+        # 注意：不能用 text[:start] 截断——因为「#人物/#维度/#值」可能排在话题后面，
+        # 截断会把它们一起切掉。这里用 sub 只删话题这一段，后面的标签保留。
         topic = None
         m_topic = re.search(r"#\s*话题\s*[:：]\s*([^\n#]*)", text)
         if m_topic:
             topic = m_topic.group(1).strip(" ，,。.、;；")
-            text = text[:m_topic.start()].rstrip(" →-—、，,；; ").strip()
+            text = re.sub(r"#\s*话题\s*[:：]\s*[^\n#]*", "", text, count=1)
+            text = text.rstrip(" →-—、，,;； ").strip()
+
+        # —— 拆出「人物」尾巴 ——
+        # 谁都不写 = 用户本人（提炼时「他」= 对话对象）。写名 = 第三方。
+        who = None
+        m_who = re.search(r"#\s*人物\s*[:：]\s*([^\n#]*)", text)
+        if m_who:
+            who = m_who.group(1).strip(" ，,。.、;；")
+            text = re.sub(r"#\s*人物\s*[:：]\s*[^\n#]*", "", text, count=1)
+            text = text.rstrip(" →-—、，,;； ").strip()
+
+        # —— 拆出「维度」尾巴 ——
+        # 事实维度：这条记忆讲的是「哪一类事实」（生日/住处/护膝放哪…）。
+        what = None
+        m_what = re.search(r"#\s*维度\s*[:：]\s*([^\n#]*)", text)
+        if m_what:
+            what = m_what.group(1).strip(" ，,。.、;；")
+            text = re.sub(r"#\s*维度\s*[:：]\s*[^\n#]*", "", text, count=1)
+            text = text.rstrip(" →-—、，,;； ").strip()
+
+        # —— 拆出「值」尾巴 ——
+        # 具体值：与维度配对，将来「同维度+同人+不同值 → 判冲突」。
+        value = None
+        m_value = re.search(r"#\s*值\s*[:：]\s*([^\n#]*)", text)
+        if m_value:
+            value = m_value.group(1).strip(" ，,。.、;；")
+            text = re.sub(r"#\s*值\s*[:：]\s*[^\n#]*", "", text, count=1)
+            text = text.rstrip(" →-—、，,;； ").strip()
+
+        # —— 拆出「关系」尾巴 ——
+        # 模型会写「[事实] 老曹生日是六月九号 #关系：2」
+        # 四档：0=用户本人，1=亲密的人，2=一般关系，3=遇到的陌生人。
+        # 谁都不写 = 0（用户本人）。这是「按关系等级物理分库」的前提。
+        tier = None
+        m_tier = re.search(r"#\s*关系\s*[:：]\s*([^\n#]*)", text)
+        if m_tier:
+            tier_raw = m_tier.group(1).strip(" ，,。.、;；")
+            # 只认 0/1/2/3，其余（模型乱写）当 None，宁可漏判不乱标档
+            if tier_raw in ("0", "1", "2", "3"):
+                tier = int(tier_raw)
+            text = re.sub(r"#\s*关系\s*[:：]\s*[^\n#]*", "", text, count=1)
+            text = text.rstrip(" →-—、，,;； ").strip()
 
         if not text:
             continue
@@ -115,7 +159,8 @@ def parse_reply(reply):
             source = "self_said"
             subject = "about_self"
         items.append({"text": text, "source": source, "subject": subject,
-                      "evidence": evidence, "topic": topic})
+                      "evidence": evidence, "topic": topic,
+                      "who": who, "what": what, "value": value, "tier": tier})
     return items
 
 def verify_grounding(llm, guess_text, evidence_episodes):
@@ -181,6 +226,13 @@ def reconstruct(llm, buffer, remember_func, now=None):
             "[猜测] 后面写：你推断的、但没直说的事\n"
             "[我说] 后面写：你（AI）自己说过、且他可能回头问的事（承诺、建议、你的自述、关系约定）\n"
             "每条正文后面，用「 #话题：X」标注这句话属于什么话题（X 用一个简短的名词短语，如「养狗」「工作」「生日」）。\n"
+            "如果这条记忆涉及「某个具体的第三方」（比如老曹、周宁、李楠），在话题后面加「 #人物：名字」。\n"
+            "如果这条记忆说的是用户本人的，就不写 #人物（默认就是他）。\n"
+            "同时判断「这个人和用户的关系等级」，在人物后面加「 #关系：数字」：\n"
+            "  0 = 用户本人；1 = 亲密的人（家人/恋人/挚友）；2 = 一般关系（同事/同学/普通朋友）；3 = 遇到的陌生人。\n"
+            "  说的是用户本人时写 #关系：0，或干脆不写（默认就是 0）。\n"
+            "如果这条记忆是一个「具体事实」（生日、住处、职业、某个东西放哪、某个约定等），加「 #维度：X #值：Y」标注它属于哪一类事实、具体值是什么（X/Y 用简短短语，如「 #维度：生日 #值：六月九号」）。\n"
+            "纯特质、纯情绪、纯关系这些没有「具体值」的，不写 #维度/#值。\n"
             "没有新认识，就只输出一个词：无\n"
             "绝对不要写「有」「好的」等其他任何话，不要解释。\n\n"
             "【只记值得长期记的，按「人脑记什么」来取舍】\n"
@@ -235,7 +287,9 @@ def reconstruct(llm, buffer, remember_func, now=None):
         if m_date:
             event_time = m_date.group(0)
         result = remember_func(text, source=it["source"], subject=it["subject"],
-                               event_time=event_time, topic=it.get("topic"))
+                               event_time=event_time, topic=it.get("topic"),
+                               who=it.get("who"), what=it.get("what"),
+                               value=it.get("value"), tier=it.get("tier"))
         if result is not None:   # 没被去重/没失败，才算「新增」
             added += 1
 

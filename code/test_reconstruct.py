@@ -10,9 +10,11 @@ def test_parse_fact_and_guess():
 
     assert len(items) == 2
     assert items[0] == {"text": "他是四川人，能吃辣", "source": "user_said",
-                        "subject": "about_user", "evidence": [], "topic": None}
+                        "subject": "about_user", "evidence": [], "topic": None,
+                        "who": None, "what": None, "value": None, "tier": None}
     assert items[1] == {"text": "他可能不太喜欢被叫大肥鱼", "source": "her_inference",
-                        "subject": "about_user", "evidence": [], "topic": None}
+                        "subject": "about_user", "evidence": [], "topic": None,
+                        "who": None, "what": None, "value": None, "tier": None}
 
 
 def test_parse_self_said():
@@ -213,6 +215,60 @@ def test_parse_topic_tag():
     assert items[0]["topic"] == "养狗"
     assert items[1]["text"] == "他最近压力大"
     assert items[1]["topic"] == "工作"
+
+
+def test_parse_who_what_value_tags():
+    """正文后面的「#人物/#维度/#值」要切走，单独存进对应字段，正文不残留。"""
+    items = parse_reply(
+        "[事实] 老曹生日是六月九号 #话题：生日 #人物：老曹 #维度：生日 #值：六月九号 #关系：2"
+    )
+
+    assert len(items) == 1
+    assert items[0]["text"] == "老曹生日是六月九号"
+    assert items[0]["who"] == "老曹"
+    assert items[0]["what"] == "生日"
+    assert items[0]["value"] == "六月九号"
+    assert items[0]["tier"] == 2
+    assert items[0]["topic"] == "生日"
+
+
+def test_parse_no_who_what_value_is_none():
+    """没写 #人物/#维度/#值 时，对应字段为 None（不误抽）。"""
+    items = parse_reply("[事实] 他叫南风")
+    assert items[0]["who"] is None
+    assert items[0]["what"] is None
+    assert items[0]["value"] is None
+    assert items[0]["tier"] is None
+
+
+def test_parse_tier_invalid_is_none():
+    """#关系 写了非法值（如 9）时，tier 判 None，宁可漏判不乱标档。"""
+    items = parse_reply("[事实] 老曹生日是六月九号 #关系：9")
+    assert items[0]["tier"] is None
+    # 非法关系尾巴仍要从正文里删掉，不能残留「#关系：9」
+    assert items[0]["text"] == "老曹生日是六月九号"
+
+
+def test_who_what_value_passed_to_remember():
+    """who/what/value 要透传给 remember_func 的对应参数。"""
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["who"] = kwargs.get("who")
+        captured["what"] = kwargs.get("what")
+        captured["value"] = kwargs.get("value")
+        captured["tier"] = kwargs.get("tier")
+        return "ok"
+
+    reconstruct(
+        lambda p: "[事实] 老曹生日是六月九号 #人物：老曹 #维度：生日 #值：六月九号 #关系：2",
+        ["用户：老曹生日是六月九号"],
+        remember,
+    )
+    assert captured["who"] == "老曹"
+    assert captured["what"] == "生日"
+    assert captured["value"] == "六月九号"
+    assert captured["tier"] == 2
 
 
 def test_parse_no_topic_is_none():

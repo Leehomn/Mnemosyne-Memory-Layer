@@ -19,7 +19,8 @@ IMPRESSION_HALF_LIVES = {
 def make_item(text, source, confidence, layer="episode", hits=0,
               base_weight=1.0, half_life=None, created_at=None,
               subject="about_user", kind=None, occurrences=1,
-              event_time=None, topic=None):
+              event_time=None, topic=None,
+              who=None, what=None, value=None, tier=None):
     """
     创建一条记忆条目（返回一个字典）。
 
@@ -34,6 +35,24 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         topic       : 可选。这条记忆的「话题标签」字符串（如 "养狗"/"工作"）。
                       由模型在写入时顺带输出，用于将来「按话题缩小召回范围」。
                       现在只存不筛，先观察话题词质量；默认 None，老数据兼容。
+        who         : 可选。这条记忆「涉及哪个具体的人」。约定：
+                      - None = 用户本人（提炼时「他」= 对话对象，第三人称写法）
+                      - 写名 = 第三方（如 "老曹"/"周宁"/"李楠"）
+                      用于将来「按人物隔离」：who 不同的记忆永不判冲突、永不合并，
+                      避免「周宁的护膝」和「老曹的生日」被当成同一事实（认错人）。
+                      现在只存不筛，先观察模型抽取质量；默认 None，老数据兼容。
+        what        : 可选。这条记忆的「事实维度」标签（如 "生日"/"住处"/"护膝放哪"）。
+                      用于将来「同维度 + 同人 + 不同值 → 判冲突」，取代现在靠模型
+                      猜文本语义的脆弱做法。现在只存不筛；默认 None，老数据兼容。
+        value       : 可选。这条记忆的「具体值」（如 "6月9号"/"北京"/"柜子下面"）。
+                      与 what 配对使用：同一 what 给出不同 value，才是「同一事实
+                      的新版本」，其余都是不同事实。现在只存不筛；默认 None，兼容。
+        tier        : 可选。这条记忆涉及的人的「关系等级」，四档：
+                      0 = 用户本人，1 = 亲密的人，2 = 一般关系，3 = 遇到的陌生人。
+                      由模型在写入时顺带判断（谁都不写 = 0 用户本人）。
+                      将来用于「按关系等级物理分库」：不同档存不同文件，
+                      关系亲疏还能影响记忆策略（亲密记得细、陌生一笔带过）。
+                      现在只存不筛，先观察模型判断质量；默认 None，老数据兼容。
 
     返回：
         一个字典，代表一条记忆
@@ -58,6 +77,10 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         "created_at": created_at,
         "event_time": event_time,    # 事件发生的逻辑日期（可选，None=没记/不适用）
         "topic": topic,              # 话题标签（可选，None=没打标签，供将来按话题召回）
+        "who": who,                  # 涉及哪个具体的人（None=用户本人，写名=第三方）
+        "what": what,                # 事实维度标签（可选，None=没抽，供将来按维度判冲突）
+        "value": value,              # 具体值（可选，None=没抽，与 what 配对用）
+        "tier": tier,                # 关系等级 0用户/1亲密/2一般/3陌生（可选，None=未判）
         "subject": subject,
         "kind": kind,
         "occurrences": occurrences,   # 在对话里反复出现的次数
