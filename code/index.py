@@ -72,7 +72,14 @@ class Cognition:
         # 互相软删，把 50.9% 的记忆都标成墓碑（正是三个倒退考点的根因）。
         if self.llm is not None and items and source == "user_said":
             from conflict import find_conflicts
-            conflicts = find_conflicts(self.llm, text, items)
+            # 冲突检测侧也接语义向量粗筛：先回填旧记忆向量，只把和新话
+            # 语义最相关的一小撮喂给模型判冲突（和语义召回同一套 embedder）。
+            emb_map = None
+            if self.embedder is not None:
+                texts = [m["text"] for m in items]
+                emb_map = embed_with_cache(self.embedder, texts, self._emb_cache)
+            conflicts = find_conflicts(self.llm, text, items,
+                                       embedder=self.embedder, emb_map=emb_map)
             for old in conflicts:
                 self.mark_deleted(old, reason="被新信息推翻", superseded_by=text)
 

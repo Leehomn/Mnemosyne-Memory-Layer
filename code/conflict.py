@@ -2,6 +2,8 @@
 
 import re
 
+from embed import rank_by_similarity, EMBED_TOP_K
+
 # 冲突检测前的话题粗筛：只留「和新话字面沾边」的旧记忆，再喂给模型细判。
 # 否则新话拿去和全库几千条比对，模型在超长列表里过拟合，把「狗叫瓦片」
 # 和「他肩膀紧」这种完全不相关的也判成冲突（P14 实测误删 1128 条）。
@@ -36,7 +38,7 @@ def _preselect(new_text, items):
     return [m for j, m in scored[:_PRESELECT_MAX_ITEMS]]
 
 
-def find_conflicts(llm, new_text, items):
+def find_conflicts(llm, new_text, items, embedder=None, emb_map=None):
     """
     用模型判断：new_text 和 items 里哪些「语义冲突」（如「爱吃辣」vs「不吃辣了」）。
 
@@ -44,6 +46,10 @@ def find_conflicts(llm, new_text, items):
         llm      : 模型函数
         new_text : 新信息（用户刚说的）
         items    : 已有记忆列表
+        embedder : 可选。语义向量函数 embed(text)->vector，用于冲突前的粗筛。
+        emb_map  : 可选。{text: vector} 缓存，配合 embedder 用。
+                   传了 embedder 就先「算 new_text 向量 → 余弦取 top K」，
+                   再让模型细判；不传则退回字面 Jaccard 粗筛（向后兼容）。
 
     返回：
         冲突的旧记忆列表
@@ -56,7 +62,14 @@ def find_conflicts(llm, new_text, items):
     # —— 话题约束（写入侧）：先粗筛，只留和新话可能相关的旧记忆 ——
     # 否则「狗叫瓦片」这种新话会拿去和「他肩膀紧」等全库几千条比对，
     # 模型过拟合乱判冲突、误删大量无关记忆（见模块顶部注释）。
-    items = _preselect(new_text, items)
+    # 有两种粗筛：
+    #  1. 语义向量（embedder + emb_map 都传了）：按余弦取 top K，最准；
+    #  2. 字面 Jaccard（老行为）：只挡「字面完全不沾边」的，语义反义要留给模型。
+    if embedder is not None and emb_map is not None:
+        qvec = embedder(new_text)
+        items = rank_by_similarity(qvec, items, emb_map, limit=EMBED_TOP_K)
+    else:
+        items = _preselect(new_text, items)
     if not items:
         return []
 

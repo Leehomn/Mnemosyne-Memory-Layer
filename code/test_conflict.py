@@ -4,6 +4,15 @@ from conflict import find_conflicts, _preselect
 from item import make_item
 
 
+def _fake_embedder(vectors):
+    """造一个假的向量函数：text -> 给定向量（按传入顺序）。"""
+    def embed(text):
+        if isinstance(text, str):
+            return vectors[0]
+        return vectors
+    return embed
+
+
 def _items():
     # 两条字面都和「吃辣/饮食」沾边，粗筛不会砍掉，编号解析测试才能独立验证。
     return [
@@ -204,3 +213,51 @@ def test_preselect_limits_to_max():
     ]
     got = _preselect("他喜欢运动", items)
     assert len(got) <= 50
+
+
+def test_embedder_preselect_used_when_provided():
+    """传了 embedder + emb_map 时，冲突检测走「语义向量粗筛」，而不是字面 Jaccard。
+
+    关键场景：「他在找工作」和「他去面试了」字面 Jaccard 很低（会被字面粗筛砍掉），
+    但语义高度相关——语义粗筛应该把它留下交给模型细判。这正是语义向量的价值：
+    字面无关但语义相关的记忆，不能被字面粗筛误杀。
+    """
+    items = [
+        make_item("他去面试了", "user_said", 0.9),
+    ]
+    qvec = [1.0, 0.0]
+    emb_map = {"他去面试了": [1.0, 0.0]}   # 和 qvec 余弦 = 1
+    embedder = _fake_embedder([qvec])
+
+    seen = []
+
+    def llm(prompt):
+        seen.append(prompt)
+        return "无"
+
+    find_conflicts(llm, "他在找工作", items,
+                   embedder=embedder, emb_map=emb_map)
+
+    # 语义粗筛把「他去面试了」留下了，模型收到提示词
+    assert seen, "语义粗筛应该留下语义相关但字面无关的记忆"
+    assert "他去面试了" in seen[0]
+
+
+def test_no_embedder_falls_back_to_jaccard():
+    """不传 embedder 时，退回字面 Jaccard 粗筛（老行为不变）。
+
+    同一个场景（「他在找工作」vs「他去面试了」）字面 Jaccard 很低，
+    字面粗筛会砍掉，find_conflicts 不再调模型、直接返回空。
+    """
+    items = [
+        make_item("他去面试了", "user_said", 0.9),
+    ]
+    calls = []
+
+    def llm(prompt):
+        calls.append(prompt)
+        return "0"
+
+    found = find_conflicts(llm, "他在找工作", items)
+    assert found == []
+    assert calls == [], "字面 Jaccard 应该砍掉字面无关的记忆，不再调模型"
