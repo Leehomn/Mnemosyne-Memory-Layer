@@ -184,11 +184,10 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 
 ## 环境说明
 
-- **Python**：`python` = 3.13.15（`D:\python313`），pytest 装在这里
+- **Python**：`python` = 3.14.7（`C:\Users\pc\AppData\Local\Python\pythoncore-3.14-64`），pytest 装在这里
 - **跑测试**：在 `code/` 目录下 `python -m pytest`（140 passed）
 - **依赖**：只有 `openai`（调 DeepSeek 用）；不接模型时纯标准库
 - **Git**：仓库在项目根目录，提交历史见 `git log`（部分 shell 里 `git.exe` 不在 PATH，需在 PyCharm 终端或配好 PATH 后使用）
-- **Python 环境待统一**：本机有 3.13（D 盘）和 3.14（AppData）两个 Python，建议找时间统一，避免依赖混乱
 
 ---
 
