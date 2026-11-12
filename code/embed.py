@@ -134,16 +134,21 @@ def cosine(a, b):
     return dot / (math.sqrt(na) * math.sqrt(nb))
 
 
-def rank_by_similarity(query_vec, items, emb_map, limit=None):
+def rank_by_similarity(query_vec, items, emb_map, limit=None, min_similarity=None):
     """
     按「query 向量」和每条记忆的向量（从 emb_map 按 text 查）的余弦相似度，
     从高到低排序。
 
     参数：
-        query_vec : query 的向量（list[float]）
-        items     : 记忆列表（每条要有 text 字段）
-        emb_map   : {text: vector} 的映射（在内存里，不写回 items.json）
-        limit     : 最多返回几条（None = 全返回，但已经排好序）
+        query_vec      : query 的向量（list[float]）
+        items          : 记忆列表（每条要有 text 字段）
+        emb_map        : {text: vector} 的映射（在内存里，不写回 items.json）
+        limit          : 最多返回几条（None = 全返回，但已经排好序）
+        min_similarity : 相似度门槛。传了就把余弦 < 该值的记忆砍掉（"够格才留"），
+                         不传则无条件按余弦取前 limit（老行为，向后兼容）。
+                         加它是因为：向量粗筛无条件塞满 top K，会把「相似度 0.5 上下的
+                         噪音」也喂给模型细判；而真相关的记忆相似度明显更高（实测 >= 0.69）。
+                         砍掉噪音能把每次细判的喂入量从 100 条降到个位数。
 
     返回：
         按相似度降序的记忆列表（保持原 item 对象不变，不往上面挂字段）
@@ -153,7 +158,10 @@ def rank_by_similarity(query_vec, items, emb_map, limit=None):
         vec = emb_map.get(m.get("text"))
         if vec is None:
             continue
-        scored.append((cosine(query_vec, vec), m))
+        sim = cosine(query_vec, vec)
+        if min_similarity is not None and sim < min_similarity:
+            continue
+        scored.append((sim, m))
 
     scored.sort(key=lambda x: x[0], reverse=True)
     result = [m for _, m in scored]

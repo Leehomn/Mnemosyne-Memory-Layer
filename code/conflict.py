@@ -12,6 +12,11 @@ from embed import rank_by_similarity, EMBED_TOP_K
 _PRESELECT_MIN_JACCARD = 0.15   # 字面重合度门槛（很低，只砍「完全不沾边」的）
 _PRESELECT_MAX_ITEMS = 50       # 最多喂给模型细判的条数
 
+# 向量粗筛的相似度门槛（冲突检测侧专用）：真冲突候选相似度实测 >= 0.69，
+# 噪音长尾在 0.50~0.66。取 0.65 能把「塞满 100 条」砍到个位数，
+# 又保留真冲突方（0.69+）。召回侧不动（漏不得），只有这里漏删风险可控。
+_SIM_MIN = 0.65
+
 
 def _preselect(new_text, items):
     """
@@ -131,7 +136,8 @@ def find_conflicts(llm, new_text, items, embedder=None, emb_map=None):
     #  2. 字面 Jaccard（老行为）：只挡「字面完全不沾边」的，语义反义要留给模型。
     if embedder is not None and emb_map is not None:
         qvec = embedder(new_text)
-        items = rank_by_similarity(qvec, items, emb_map, limit=EMBED_TOP_K)
+        items = rank_by_similarity(qvec, items, emb_map, limit=EMBED_TOP_K,
+                                   min_similarity=_SIM_MIN)
     else:
         items = _preselect(new_text, items)
     if not items:

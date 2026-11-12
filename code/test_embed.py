@@ -70,6 +70,32 @@ def test_rank_by_similarity_limit():
     assert got[1]["text"] == "b"
 
 
+def test_rank_by_similarity_min_similarity_filters():
+    # 传 min_similarity 时，低于门槛的记忆要被砍掉（"够格才留"）
+    qvec = [1.0, 0.0]
+    emb_map = {
+        "a": [1.0, 0.0],   # 余弦 1.0
+        "b": [1.0, 1.0],   # 余弦 0.707
+        "c": [0.0, 1.0],   # 余弦 0.0
+    }
+    items = [make_item(t, "user_said", 0.9) for t in ("c", "b", "a")]
+    got = rank_by_similarity(qvec, items, emb_map, min_similarity=0.65)
+    # c（0.0）被砍，b（0.707）、a（1.0）留下
+    assert [m["text"] for m in got] == ["a", "b"]
+
+
+def test_rank_by_similarity_min_similarity_none_keeps_all():
+    # 不传 min_similarity（None）时保持老行为：无条件按余弦排序，不砍
+    qvec = [1.0, 0.0]
+    emb_map = {
+        "a": [1.0, 0.0],
+        "c": [0.0, 1.0],
+    }
+    items = [make_item(t, "user_said", 0.9) for t in ("c", "a")]
+    got = rank_by_similarity(qvec, items, emb_map)
+    assert [m["text"] for m in got] == ["a", "c"]
+
+
 def test_embed_with_cache_batches_and_skips():
     # 假 embedder：把每个字映射成固定向量，返回 list of list
     seen = []
