@@ -6,6 +6,70 @@ from item import make_item
 from store import load_items, save_items
 
 
+def test_remember_many_equivalent_to_remember(tmp_path):
+    """批量写和逐条写的最终库一致（用假模型：无冲突）。"""
+    def fake_llm(prompt):
+        return "无"
+
+    # 逐条写
+    c1 = Cognition(data_dir=str(tmp_path / "one"), llm=fake_llm)
+    for text, src in [("他养了狗", "user_said"), ("他最近压力大", "her_inference")]:
+        c1.remember(text, source=src)
+
+    # 批量写
+    c2 = Cognition(data_dir=str(tmp_path / "many"), llm=fake_llm)
+    c2.remember_many([
+        {"text": "他养了狗", "source": "user_said"},
+        {"text": "他最近压力大", "source": "her_inference"},
+    ])
+
+    one = [m["text"] for m in load_items(c1.path)]
+    many = [m["text"] for m in load_items(c2.path)]
+    assert sorted(one) == sorted(many)
+
+
+def test_remember_many_dedup_occurrences(tmp_path):
+    """批量写同一批里两条相似的话，去重合并后 occurrences 正确。"""
+    cog = Cognition(data_dir=str(tmp_path))
+    cog.remember_many([
+        {"text": "我爱吃辣", "source": "user_said", "confidence": 0.9},
+        {"text": "他爱吃辣", "source": "user_said", "confidence": 0.9},
+    ])
+    items = load_items(cog.path)
+    assert len(items) == 1
+    assert items[0]["occurrences"] == 2
+
+
+def test_remember_many_conflict_tombstone(tmp_path):
+    """批量写里冲突检测一次判出，正确给旧记忆打墓碑。"""
+    calls = []
+
+    def fake_llm(prompt):
+        calls.append(prompt)
+        return "0: 0"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+    cog.remember("他爱吃辣", source="user_said", confidence=0.9)
+    cog.remember_many([
+        {"text": "他不吃辣了", "source": "user_said", "confidence": 0.9},
+    ])
+    items = load_items(cog.path)
+    deleted = [m for m in items if m.get("deleted")]
+    assert len(deleted) == 1
+    assert deleted[0]["text"] == "他爱吃辣"
+
+
+def test_remember_many_invalid_skipped(tmp_path):
+    """批量写里不合法的条目被跳过，不崩。"""
+    cog = Cognition(data_dir=str(tmp_path))
+    added = cog.remember_many([
+        {"text": "他养了狗", "source": "user_said"},
+        {"text": "非法来源", "source": "unknown"},
+    ])
+    assert added == 1
+    assert len(load_items(cog.path)) == 1
+
+
 def test_remember_and_recall(tmp_path):
     cog = Cognition(data_dir=str(tmp_path))
     cog.remember("我叫南风", source="user_said", confidence=0.95)
