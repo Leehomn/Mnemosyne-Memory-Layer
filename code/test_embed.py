@@ -1,6 +1,6 @@
 # test_embed.py —— 测试语义向量与余弦粗筛
 
-from embed import cosine, rank_by_similarity, embed_with_cache, EMBED_TOP_K
+from embed import cosine, rank_by_similarity, embed_with_cache, _embed_chunk, EMBED_TOP_K
 from item import make_item
 
 
@@ -95,3 +95,63 @@ def test_embed_with_cache_batches_and_skips():
 def test_embed_top_k_constant():
     # 粗筛上限要取大一点（宁可多留不漏），但不能是「全库」
     assert EMBED_TOP_K > 0
+
+
+def test_embed_chunk_batch_ok():
+    # 批量成功时原样返回
+    def ok(chunk):
+        return [[float(ord(c))] for c in chunk]
+
+    assert _embed_chunk(ok, ["甲", "乙"]) == [[float(ord("甲"))], [float(ord("乙"))]]
+
+
+def test_embed_chunk_batch_fail_then_single_retry():
+    # 批量失败 → 拆单条重试；单条成功要返回正确向量
+    calls = []
+
+    def flaky(chunk):
+        if isinstance(chunk, str):
+            calls.append(("single", chunk))
+            return [float(ord(chunk))]
+        calls.append(("batch", tuple(chunk)))
+        raise RuntimeError("瞬时 400")
+
+    got = _embed_chunk(flaky, ["甲", "乙"])
+    assert got == [[float(ord("甲"))], [float(ord("乙"))]]
+    assert ("batch", ("甲", "乙")) in calls
+    assert ("single", "甲") in calls
+    assert ("single", "乙") in calls
+
+
+def test_embed_chunk_single_fail_skips():
+    # 批量失败、单条也失败 → 该条置 None，不影响其它条
+    state = {"batch_ok": False, "bad": "乙"}
+
+    def flaky(chunk):
+        if isinstance(chunk, str):
+            if chunk == state["bad"]:
+                raise RuntimeError("单条也失败")
+            return [float(ord(chunk))]
+        if state["batch_ok"]:
+            return [[float(ord(c))] for c in chunk]
+        raise RuntimeError("瞬时 400")
+
+    got = _embed_chunk(flaky, ["甲", "乙", "丙"])
+    assert got[0] == [float(ord("甲"))]
+    assert got[1] is None
+    assert got[2] == [float(ord("丙"))]
+
+
+def test_embed_with_cache_skips_failed():
+    # 批量失败+单条失败时，该条不写缓存，其余正常写入
+    def flaky(chunk):
+        if isinstance(chunk, str):
+            if chunk == "乙":
+                raise RuntimeError("单条也失败")
+            return [float(ord(chunk))]
+        raise RuntimeError("瞬时 400")
+
+    cache = {}
+    embed_with_cache(flaky, ["甲", "乙"], cache, batch_size=8)
+    assert "甲" in cache
+    assert "乙" not in cache

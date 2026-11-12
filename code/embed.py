@@ -85,10 +85,32 @@ def embed_with_cache(embedder, texts, cache, batch_size=64):
     missing = [t for t in texts if t not in cache]
     for i in range(0, len(missing), batch_size):
         chunk = missing[i:i + batch_size]
-        vecs = embedder(chunk)
-        for t, v in zip(chunk, vecs):
-            cache[t] = v
+        for t, v in zip(chunk, _embed_chunk(embedder, chunk)):
+            # 单条还失败时 v 为 None，跳过这条（不写缓存），后续按「无向量」处理
+            if v is not None:
+                cache[t] = v
     return cache
+
+
+def _embed_chunk(embedder, chunk):
+    """
+    算一批文字的向量，返回和 chunk 等长的列表。
+
+    批量请求失败（如服务端瞬时 400）时，自动拆成单条重试；
+    单条也失败的置为 None（跳过），不拖垮整场跑。
+    """
+    try:
+        return embedder(chunk)
+    except Exception:
+        pass
+
+    result = []
+    for t in chunk:
+        try:
+            result.append(embedder(t))
+        except Exception:
+            result.append(None)
+    return result
 
 
 def cosine(a, b):
