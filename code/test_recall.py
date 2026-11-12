@@ -1,6 +1,6 @@
 # test_recall.py —— 测试 recall 模块
 
-from recall import recall, format_recall_block
+from recall import recall, format_recall_block, _expand_conflicts
 from item import make_item
 
 
@@ -210,3 +210,39 @@ def test_confirmed_guess_enters_facts_not_guesses():
     assert "关于他的事实" in block      # 进事实区
     assert "他可能想家" in block        # 文本在
     assert "你的猜测" not in block      # 关键：不能再进猜测区
+
+
+# ===== 新增：矛盾对召回与格式化 =====
+
+def test_expand_conflicts_brings_partner():
+    """命中矛盾对一方，自动带上仍存活的另一方。"""
+    a = make_item("他住在合租房，客厅地板是浅灰色", "user_said", 0.9)
+    b = make_item("他拖了客厅地板，说地板是米色", "user_said", 0.9)
+    a["conflicts_with"] = [{"text": b["text"], "created_at": b["created_at"]}]
+    b["conflicts_with"] = [{"text": a["text"], "created_at": a["created_at"]}]
+
+    got = _expand_conflicts([a], [a, b])
+    texts = [m["text"] for m in got]
+    assert "浅灰" in "".join(texts)
+    assert "米色" in "".join(texts)
+
+
+def test_expand_conflicts_skips_deleted_partner():
+    """另一方已被删（墓碑）时，说明矛盾已解决，不带。"""
+    a = make_item("他住在合租房，客厅地板是浅灰色", "user_said", 0.9)
+    a["conflicts_with"] = [{"text": "米色", "created_at": 123}]
+
+    got = _expand_conflicts([a], [a])
+    assert len(got) == 1  # 另一方不在存活池，不带
+
+
+def test_format_recall_block_marks_conflict_pair():
+    """矛盾对在事实区要标「两说未定」，并加段尾提示两版都提。"""
+    a = make_item("他住在合租房，客厅地板是浅灰色", "user_said", 0.9)
+    b = make_item("他拖了客厅地板，说地板是米色", "user_said", 0.9)
+    a["conflicts_with"] = [{"text": b["text"], "created_at": b["created_at"]}]
+    b["conflicts_with"] = [{"text": a["text"], "created_at": a["created_at"]}]
+
+    block = format_recall_block([a, b])
+    assert "两说未定" in block
+    assert "无法确定" in block

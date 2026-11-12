@@ -106,3 +106,9 @@ def test_who_what_value_stored_when_passed():
     assert item["what"] == "生日"
     assert item["value"] == "六月九号"
     assert item["tier"] == 2
+
+
+def test_conflicts_with_defaults_to_empty():
+    # 不传 conflicts_with 时，默认空列表（老数据兼容，无该字段也不崩）
+    item = make_item("他胃疼", "user_said", 0.9)
+    assert item["conflicts_with"] == []

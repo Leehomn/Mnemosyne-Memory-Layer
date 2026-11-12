@@ -7,6 +7,38 @@ from decay import decayed_weight, days_since, effective_half_life
 from embed import rank_by_similarity, EMBED_TOP_K
 
 
+def _expand_conflicts(selected, pool):
+    """
+    把「两说未定」的矛盾对成对召回：selected 里命中任一方，自动带上「仍存活」的
+    另一方（从 pool 里按 (text, created_at) 找到）。
+
+    pool 是「已过滤掉墓碑」的全部存活记忆；selected 是当前要返回的一小撮
+    （可能因为 limit 或排序被砍掉了矛盾对的另一方）。矛盾对的另一方若已被删
+    （不在 pool 里），说明矛盾已解决，不带。
+    """
+    by_key = {(m.get("text"), m.get("created_at")): m for m in pool}
+    out = list(selected)
+    seen = {(m.get("text"), m.get("created_at")) for m in out}
+    for m in selected:
+        for ref in m.get("conflicts_with", []):
+            key = (ref.get("text"), ref.get("created_at"))
+            if key in by_key and key not in seen:
+                out.append(by_key[key])
+                seen.add(key)
+    return out
+
+
+def _is_conflict_member(m, result_keys):
+    """
+    判断 m 是否是「两说未定」矛盾对的一员：它的 conflicts_with 里有另一方，
+    且另一方也在这批召回结果里（成对出现才标注，另一方被删了就不标）。
+    """
+    for ref in m.get("conflicts_with", []):
+        if (ref.get("text"), ref.get("created_at")) in result_keys:
+            return True
+    return False
+
+
 def recall(items, limit=8, now=None):
     """
     按「权重」从高到低，挑出最重要的前 limit 条。
@@ -20,7 +52,12 @@ def recall(items, limit=8, now=None):
         按权重排序后的前 limit 条
     """
     # 先过滤掉已失效（墓碑）的记忆
-    items = [m for m in items if not m.get("deleted")]
+    alive = [m for m in items if not m.get("deleted")]
+
+    # 矛盾对成对召回：命中一方带另一方，让「两说未定」一起进结果。
+    # 注意：recall 的 items 只是「待选池」，先扩矛盾对再排序取前 limit，
+    # 否则矛盾对另一方可能因权重低被 limit 砍掉。
+    items = _expand_conflicts(alive, alive)
 
     # 1. 给每条记忆算权重，存进 (权重, 记忆) 的列表
     scored = []
@@ -75,23 +112,44 @@ def format_recall_block(items):
 
     parts = []
     if facts:
-        lines = "\n".join(f"- {m['text']}" for m in facts)
+        # 矛盾对标「两说未定」，让模型别擅自只选一版、要两版都提并说明不确定
+        fact_keys = {(m.get("text"), m.get("created_at")) for m in facts}
+        lines = "\n".join(
+            f"- {m['text']}" + ("  ⚠️两说未定" if _is_conflict_member(m, fact_keys) else "")
+            for m in facts
+        )
         parts.append(f"关于他的事实（他说过的，可以当真）：\n{lines}")
 
     if guesses:
-        lines = "\n".join(f"- {m['text']}" for m in guesses)
+        guess_keys = {(m.get("text"), m.get("created_at")) for m in guesses}
+        lines = "\n".join(
+            f"- {m['text']}" + ("  ⚠️两说未定" if _is_conflict_member(m, guess_keys) else "")
+            for m in guesses
+        )
         parts.append(f"你的猜测（不是他说的，别当事实讲）：\n{lines}")
 
     if self_said:
-        lines = "\n".join(f"- {m['text']}" for m in self_said)
+        self_keys = {(m.get("text"), m.get("created_at")) for m in self_said}
+        lines = "\n".join(
+            f"- {m['text']}" + ("  ⚠️两说未定" if _is_conflict_member(m, self_keys) else "")
+            for m in self_said
+        )
         parts.append(f"你之前说过的话（你自己说过的，不是他的事实）：\n{lines}")
 
     if not parts:
         return ""
 
+    # 若这批里有矛盾对，段尾补一条明确指令：两版都要提，且不擅自定论。
+    tail = ""
+    if any(_is_conflict_member(m, {(x.get("text"), x.get("created_at")) for x in items})
+           for m in items):
+        tail = ("\n\n注意：上面标了「两说未定」的条目是彼此矛盾的两种说法，"
+                "都没有被推翻。回答时两种说法都要提到，并说明目前无法确定哪个对，"
+                "不要只取其中一个当定论。")
+
     # 原来开头是「（」、结尾补「）」又内嵌一对「（）」，括号是错配的。
     # 这段是要直接喂给模型的提示词，格式乱会削弱「事实/猜测」的分区感。
-    return "\n\n".join(parts) + "\n\n用法：聊到相关再说，别主动复述。"
+    return "\n\n".join(parts) + "\n\n用法：聊到相关再说，别主动复述。" + tail
 
 def semantic_recall(llm, items, query, now=None, embedder=None, emb_map=None):
     """
@@ -176,4 +234,7 @@ def semantic_recall(llm, items, query, now=None, embedder=None, emb_map=None):
         if 0 <= idx < len(items) and idx not in ids:
             ids.append(idx)
 
-    return [items[i] for i in ids]
+    related = [items[i] for i in ids]
+    # 矛盾对成对召回：命中一方，带上「仍存活」的另一方（两说未定一起出）。
+    # pool 用已过滤墓碑的全部 items，另一方被删了就不会带。
+    return _expand_conflicts(related, items)

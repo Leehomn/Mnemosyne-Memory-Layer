@@ -150,21 +150,21 @@ def test_consolidate_promotes_existing(tmp_path):
 def test_conflict_marks_deleted(tmp_path):
     from index import Cognition
 
-    # 假模型：回答「冲突的编号是 0」
+    # 假模型：回答「推翻：0」（第 0 条被明确纠错推翻）
     def fake_llm(prompt):
-        # 冲突检测时会返回「0」（第 0 条冲突）
-        if "冲突" in prompt:
-            return "0"
+        # 冲突检测时会返回「推翻：0」（第 0 条冲突）
+        if "推翻" in prompt:
+            return "推翻：0"
         # 其他情况返回无
-        return "无"
+        return "推翻：无\n矛盾：无"
 
     cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
 
     # 先存「他爱吃辣」
     cog.remember("他爱吃辣", source="user_said", confidence=0.9)
 
-    # 用户说「我不吃辣了」→ 触发冲突检测
-    cog.remember("我不吃辣了", source="user_said", confidence=0.9)
+    # 用户说「我记错了，我不吃辣」→ 触发冲突检测（明确纠错 → 推翻）
+    cog.remember("我记错了，我不吃辣", source="user_said", confidence=0.9)
 
     # 检查：「他爱吃辣」应该被标 deleted=True
     from store import load_items
@@ -172,7 +172,76 @@ def test_conflict_marks_deleted(tmp_path):
     chila = [m for m in items if "爱吃辣" in m.get("text", "")]
     assert len(chila) == 1
     assert chila[0]["deleted"] == True          # 被标失效
-    assert chila[0]["superseded_by"] == "我不吃辣了"  # 记录了被谁推翻
+    assert chila[0]["superseded_by"] == "我记错了，我不吃辣"  # 记录了被谁推翻
+
+
+def test_conflict_contradiction_links(tmp_path):
+    """无纠错信号的「同维度不同值」→ 两版都留，双向标 conflicts_with。
+
+    这是「没解释的矛盾」的修复核心：旧版不再被删成墓碑，
+    而是和新版互相标「两说未定」，召回时一起带出。
+    """
+    from index import Cognition
+
+    def fake_llm(prompt):
+        if "推翻" in prompt:
+            return "推翻：无\n矛盾：0"
+        return "推翻：无\n矛盾：无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 旧：地板浅灰（无纠错信号，只是后来说了米色）
+    cog.remember("他住在合租房，客厅地板是浅灰色", source="user_said", confidence=0.9)
+    # 新：地板米色，没有「我记错了」
+    cog.remember("他拖了客厅地板，说地板是米色", source="user_said", confidence=0.9)
+
+    from store import load_items
+    items = load_items(cog.path)
+    assert all(not m.get("deleted") for m in items), "无纠错信号的两版都不该被删"
+
+    grey = [m for m in items if "浅灰" in m["text"]][0]
+    beige = [m for m in items if "米色" in m["text"]][0]
+
+    # 双向标注
+    grey_refs = [(x["text"], x["created_at"]) for x in grey.get("conflicts_with", [])]
+    beige_refs = [(x["text"], x["created_at"]) for x in beige.get("conflicts_with", [])]
+    assert (beige["text"], beige["created_at"]) in grey_refs
+    assert (grey["text"], grey["created_at"]) in beige_refs
+
+
+def test_contradiction_not_merged_by_dedup(tmp_path):
+    """字面高度相似的两个矛盾版本不能被去重合并吞掉。
+
+    阶段2 P12 实测踩到：『两条封条』vs『三条封条』jaccard>=0.5，
+    去重循环抢在矛盾对挂钩之前把新版吞进旧版（occurrences 变 2），
+    矛盾另一方消失，召回只剩一版。矛盾方必须跳过合并、强制新增。
+    """
+    from index import Cognition
+
+    def fake_llm(prompt):
+        if "推翻" in prompt:
+            return "推翻：无\n矛盾：0"
+        return "推翻：无\n矛盾：无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+
+    # 旧：两条封条
+    cog.remember("周一到的黄油箱外面有两条封条", source="user_said", confidence=0.9)
+    # 新：三条封条（无纠错信号，仅一个数字之差，jaccard 高，会被判矛盾）
+    cog.remember("周一到的黄油箱外面有三条封条", source="user_said", confidence=0.9)
+
+    from store import load_items
+    items = load_items(cog.path)
+    assert all(not m.get("deleted") for m in items), "两版都不该被删"
+    assert len(items) == 2, "矛盾双方不能被去重合并成一条"
+
+    two = [m for m in items if "两条封条" in m["text"]][0]
+    three = [m for m in items if "三条封条" in m["text"]][0]
+    assert two["occurrences"] == 1 and three["occurrences"] == 1
+
+    # 双向矛盾对挂钩
+    two_refs = [(x["text"], x["created_at"]) for x in two.get("conflicts_with", [])]
+    assert (three["text"], three["created_at"]) in two_refs
 
 
 def test_inference_does_not_trigger_conflict(tmp_path):

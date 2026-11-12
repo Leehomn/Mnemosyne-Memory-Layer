@@ -89,6 +89,11 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         "superseded_by": None,       # 被哪条新记忆推翻
         "deleted_at": None,          # 被标墓碑的时间（用于真空清理）
         "digested": False,           # 事件是否已被夜间整合「消化」过
+        "conflicts_with": [],        # 与这条记忆「两说未定、尚未推翻」的另一方。
+                                     # 每项 {"text": str, "created_at": float}，用 text+created_at
+                                     # 定位（同 mark_deleted）。与 deleted 正交：deleted=被明确
+                                     # 推翻；conflicts_with=没推翻但矛盾，召回时一起带出标「两说未定」。
+                                     # 双向标注：A 指 B，B 也指 A。老数据无此字段时 get(...,[]) 兜底。
     }
     return item
 

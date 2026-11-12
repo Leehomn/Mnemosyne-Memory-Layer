@@ -78,21 +78,40 @@ class Cognition:
             if self.embedder is not None:
                 texts = [m["text"] for m in items]
                 emb_map = embed_with_cache(self.embedder, texts, self._emb_cache)
-            conflicts = find_conflicts(self.llm, text, items,
-                                       embedder=self.embedder, emb_map=emb_map)
-            for old in conflicts:
+            superseded, contradictions = find_conflicts(
+                self.llm, text, items, embedder=self.embedder, emb_map=emb_map)
+
+            # 被「明确纠错」推翻的旧记忆 → 删（墓碑）
+            for old in superseded:
                 self.mark_deleted(old, reason="被新信息推翻", superseded_by=text)
+
+            # 与「新话无信号同维度不同值」的旧记忆 → 两版都留，标矛盾对。
+            # 注意矛盾对要标在「最终落库的新事实」和「旧记忆」双方，而新事实
+            # 此刻还没入库（去重可能把它合并掉），所以先记下矛盾旧记忆，
+            # 等去重/新增拿到 result 后再双向挂钩。
+            pending_contradictions = list(contradictions)
+        else:
+            pending_contradictions = []
 
         # 重新读库（因为 mark_deleted 已经改过库）
         items = load_items(self.path)
 
         # 找相似的旧记忆（只有「关于同一个人」的才能合并：
         # 「我」的事和「他」的事，哪怕字面一样也不是一条）
+        result = None
         for old in items:
             # 墓碑（deleted）不是活记忆，不能拿来做去重合并：
             # 否则用户改口说回一条已被推翻的话，新话会被吞进死记录里，
             # 召回时又被过滤掉，等于白说。墓碑只能被「复活」机制单独处理。
             if old.get("deleted"):
+                continue
+            # 「两说未定」的矛盾方绝不能合并：否则字面高度相似的两个矛盾版本
+            # （如「两条封条」vs「三条封条」，jaccard>=0.5）会被去重吞成一条，
+            # 矛盾对还没建立、另一方就没了，召回只剩一版（阶段2 P12 实测踩到）。
+            # pending_contradictions 是冲突检测返回的旧记忆引用，按 (text, created_at) 匹配。
+            if any(p.get("text") == old.get("text") and
+                   p.get("created_at") == old.get("created_at")
+                   for p in pending_contradictions):
                 continue
             same_subject = (old.get("subject", "about_user")
                             == item.get("subject", "about_user"))
@@ -121,12 +140,29 @@ class Cognition:
                     old["half_life"] = 3650
 
                 save_items(items, self.path)
-                return old
+                result = old
+                break
 
-        # 没找到相似 → 新增
-        items.append(item)
-        save_items(items, self.path)
-        return item
+        if result is None:
+            # 没找到相似 → 新增
+            items.append(item)
+            result = item
+            save_items(items, self.path)
+
+        # —— 矛盾对双向挂钩：新事实与每个「两说未定」的旧记忆互相标注 ——
+        # 矛盾旧记忆是冲突检测前那批旧引用，落库后被重新读库成新引用；
+        # 所以这里按 (text, created_at) 定位，重新读库后再双向挂钩。
+        if pending_contradictions:
+            fresh = load_items(self.path)
+            result_key = (result.get("text"), result.get("created_at"))
+            for old in pending_contradictions:
+                old_key = (old.get("text"), old.get("created_at"))
+                if old_key == result_key:
+                    continue
+                self._link_conflicts_in(fresh, result_key, old_key)
+            save_items(fresh, self.path)
+
+        return result
 
     def recall_block(self, limit=8):
         """
@@ -248,8 +284,37 @@ class Cognition:
                 m["superseded_by"] = superseded_by
                 m["deleted_at"] = time.time()
                 break
+        # 被推翻方已失效：清理所有活记忆 conflicts_with 里指向它的项，
+        # 否则召回时「另一方仍存活吗」判断会错乱、矛盾对越积越脏。
+        # 这里统一按 (text, created_at) 二元组定位。
+        for m in items:
+            cw = m.get("conflicts_with", [])
+            if not cw:
+                continue
+            cleaned = [x for x in cw
+                       if not (x.get("text") == old_item.get("text")
+                               and x.get("created_at") == old_item.get("created_at"))]
+            if len(cleaned) != len(cw):
+                m["conflicts_with"] = cleaned
         save_items(items, self.path)
         return old_item
+
+    def _link_conflicts_in(self, items, a_key, b_key):
+        """
+        在给定的记忆列表里，把 (text, created_at) 两键标成「两说未定」矛盾对
+        （双向、去重、自指跳过）。只改传入列表的 conflicts_with 字段。
+        """
+        if a_key == b_key:
+            return
+        for key, other in ((a_key, b_key), (b_key, a_key)):
+            for m in items:
+                if m.get("text") == key[0] and m.get("created_at") == key[1]:
+                    cw = m.setdefault("conflicts_with", [])
+                    if all(not (x.get("text") == other[0]
+                                and x.get("created_at") == other[1])
+                           for x in cw):
+                        cw.append({"text": other[0], "created_at": other[1]})
+                    break
 
     def consolidate(self):
         """
