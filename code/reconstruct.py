@@ -269,10 +269,7 @@ def reconstruct(llm, buffer, remember_func, now=None):
     # 3. 解析
     items = parse_reply(reply)
 
-    # 4. 写入（逐条：每条独立走 remember 的冲突检测与去重）
-    #    中文基准成本大头是「语义召回」，不是「冲突检测」；批量在这里没有收益，
-    #    反而让冲突检测判保守、记忆库膨胀，抬高了召回成本。故切回逐条。
-    #    find_conflicts_batch / remember_many 保留给挑战赛适配器（那里冲突检测才是大头）。
+    # 4. 逐条写入（remember_func 会做校验 + 去重 + 存盘）
     added = 0
     for it in items:
         text = it["text"]
@@ -289,7 +286,6 @@ def reconstruct(llm, buffer, remember_func, now=None):
         m_date = _DATE_PATTERN.search(text)
         if m_date:
             event_time = m_date.group(0)
-
         result = remember_func(text, source=it["source"], subject=it["subject"],
                                event_time=event_time, topic=it.get("topic"),
                                who=it.get("who"), what=it.get("what"),

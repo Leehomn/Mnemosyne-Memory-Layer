@@ -1,6 +1,6 @@
 # test_conflict.py —— 测试冲突检测
 
-from conflict import find_conflicts, find_conflicts_batch, _preselect
+from conflict import find_conflicts, _preselect
 from item import make_item
 
 
@@ -261,79 +261,3 @@ def test_no_embedder_falls_back_to_jaccard():
     found = find_conflicts(llm, "他在找工作", items)
     assert found == []
     assert calls == [], "字面 Jaccard 应该砍掉字面无关的记忆，不再调模型"
-
-
-# —— 批量冲突检测 ——
-
-def test_find_conflicts_batch_basic():
-    """批量版：一次调用判多条新事实，分别映射到各自的冲突旧记忆。"""
-    items = [
-        make_item("他爱吃辣", "user_said", 0.9),
-        make_item("他爱吃火锅", "user_said", 0.9),
-        make_item("他住在北京", "user_said", 0.9),
-    ]
-
-    def llm(prompt):
-        return "0: 0,1\n2: 2"
-
-    result = find_conflicts_batch(llm, ["他不吃辣了", "他搬家了", "他不住北京了"], items)
-    assert [m["text"] for m in result[0]] == ["他爱吃辣", "他爱吃火锅"]
-    assert result[1] == []
-    assert [m["text"] for m in result[2]] == ["他住在北京"]
-
-
-def test_find_conflicts_batch_no_conflict():
-    items = [
-        make_item("他爱吃辣", "user_said", 0.9),
-    ]
-    result = find_conflicts_batch(lambda p: "无", ["他不吃辣了"], items)
-    assert result == [[]]
-
-
-def test_find_conflicts_batch_empty_items():
-    result = find_conflicts_batch(lambda p: "0", ["他不吃辣了"], [])
-    assert result == [[]]
-
-
-def test_find_conflicts_batch_deleted_excluded():
-    """墓碑不该参与批量冲突判断。"""
-    items = [
-        make_item("他爱吃辣", "user_said", 0.9),
-    ]
-    items[0]["deleted"] = True
-    calls = []
-
-    def llm(prompt):
-        calls.append(prompt)
-        return "0"
-
-    result = find_conflicts_batch(llm, ["他不吃辣了"], items)
-    assert result == [[]]
-    assert calls == [], "全部墓碑时不该调模型"
-
-
-def test_find_conflicts_batch_malformed_ignored():
-    """模型格式乱（无冒号 / 越界编号）时不崩溃，宁可漏删不误删。"""
-    items = [
-        make_item("他爱吃辣", "user_said", 0.9),
-    ]
-    result = find_conflicts_batch(lambda p: "乱写一通\n99: 0", ["他不吃辣了"], items)
-    assert result == [[]]
-
-
-def test_find_conflicts_batch_single_call():
-    """批量版的灵魂：N 条新事实只调一次模型。"""
-    items = [
-        make_item(f"旧记忆{i}", "user_said", 0.9) for i in range(10)
-    ]
-    # 让新事实与旧记忆字面沾边，_preselect 才会留下候选、触发模型调用
-    items[0]["text"] = "新事实1 相关"
-    items[1]["text"] = "新事实2 相关"
-    calls = []
-
-    def llm(prompt):
-        calls.append(prompt)
-        return "无"
-
-    find_conflicts_batch(llm, ["新事实1", "新事实2", "新事实3"], items)
-    assert len(calls) == 1
