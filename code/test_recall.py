@@ -194,6 +194,20 @@ def test_format_recall_block_excludes_about_self():
     assert "关于他的事实" not in block   # 不能冒充用户的事实区
 
 
+def test_format_recall_block_third_party_own_zone():
+    """第三方转述（source=third_party，置信 0.5）进独立区，不进事实区也不进猜测区。"""
+    from recall import format_recall_block
+
+    block = format_recall_block([
+        make_item("房东说钥匙他已经收到了", "third_party", 0.5, who="房东"),
+    ])
+
+    assert "第三方转述" in block
+    assert "房东说钥匙他已经收到了" in block
+    assert "关于他的事实" not in block   # 不能冒充用户亲口的事实
+    assert "你的猜测" not in block        # 不是 her_inference，不能进猜测区
+
+
 def test_confirmed_guess_enters_facts_not_guesses():
     """被验证确认的猜测（her_inference 但置信度 >= 0.8）要进事实区，不能再进猜测区。
 

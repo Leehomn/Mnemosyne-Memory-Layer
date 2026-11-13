@@ -30,6 +30,26 @@ def test_parse_self_said():
     assert items[1]["subject"] == "about_user"
 
 
+def test_parse_third_party():
+    """[转述] 前缀 → source=third_party，说话人写进 who，主体仍 about_user。"""
+    reply = "[转述] 房东说钥匙他已经收到了 #人物：房东"
+    items = parse_reply(reply)
+
+    assert len(items) == 1
+    assert items[0]["text"] == "房东说钥匙他已经收到了"
+    assert items[0]["source"] == "third_party"
+    assert items[0]["subject"] == "about_user"
+    assert items[0]["who"] == "房东"
+
+
+def test_parse_third_party_preserves_speaker_in_text():
+    """[转述] 正文必须保留说话人，不许拍平成「他做了 X」。"""
+    items = parse_reply("[转述] 桥哥说店里要关门换玻璃 #人物：桥哥")
+    assert items[0]["source"] == "third_party"
+    assert "桥哥说" in items[0]["text"]
+    assert items[0]["who"] == "桥哥"
+
+
 def test_parse_drop_invalid():
     # 没有前缀的行、空行，都应该被丢弃
     reply = "[事实] 有效的一条\n这是没有前缀的行\n\n[乱写] 这个前缀不认识"

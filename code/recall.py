@@ -98,6 +98,11 @@ def format_recall_block(items):
              if m["confidence"] >= 0.8  # 置信度够高 = 被证实（不管来源）
              and m["subject"] != "about_self"]
 
+    # 第三方转述：source=third_party（别人说的/书面写的）。置信 0.5，进不了事实区
+    # 也进不了猜测区（那是 her_inference 专属），单独一格，标「别当用户亲口的事实」。
+    # 设计定稿 5.1：third_party 必须带说话人，禁止算到对话对象头上。
+    third_party = [m for m in items if m.get("source") == "third_party"]
+
     # 我说过的话：关于 AI 自己的（about_self），单独一区。
     # 置信度不设门槛——AI 自己说过的话是确定的（self_said 出生即 0.9），不是猜。
     self_said = [m for m in items if m.get("subject") == "about_self"]
@@ -127,6 +132,14 @@ def format_recall_block(items):
             for m in guesses
         )
         parts.append(f"你的猜测（不是他说的，别当事实讲）：\n{lines}")
+
+    if third_party:
+        tp_keys = {(m.get("text"), m.get("created_at")) for m in third_party}
+        lines = "\n".join(
+            f"- {m['text']}" + ("  ⚠️两说未定" if _is_conflict_member(m, tp_keys) else "")
+            for m in third_party
+        )
+        parts.append(f"第三方转述/书面信息（不是他亲口说的，别算到他头上）：\n{lines}")
 
     if self_said:
         self_keys = {(m.get("text"), m.get("created_at")) for m in self_said}
