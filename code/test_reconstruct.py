@@ -254,6 +254,77 @@ def test_event_time_none_without_date():
     assert captured["date_kind"] == "none"
 
 
+def test_self_said_gets_now_when_assistant_delivered():
+    """助手这一轮真的交付了 → [我说] 条目用 now 兜底填 event_time，date_kind=derived。
+
+    这是 P17-CASE-008 那类题的根因：助手第 91 轮说「写好了，交稿。夜雾从…」，
+    提炼成 [我说] 后正文里既没有日期也没有相对词，event_time 就成了 None，
+    「是我写的」进了库、「4 月 13 日写的」丢了，日期题答不出来。
+    信号在助手原话里（buffer 现成），不在提炼后的话里。
+    """
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["event_time"] = kwargs.get("event_time")
+        captured["date_kind"] = kwargs.get("date_kind")
+        return "ok"
+
+    reconstruct(
+        lambda p: "[我说] 我写的夜雾段落：雾从樟树渡口的水面漫上来",
+        ["用户：夜雾那段写好了没", "助手：写好了，交稿。夜雾从樟树渡口的水面漫上来"],
+        remember,
+        now="2026-04-13",
+    )
+    assert captured["event_time"] == "2026-04-13"
+    assert captured["date_kind"] == "derived"
+
+
+def test_self_said_no_now_when_assistant_just_advised():
+    """助手只是给建议（没说交付）→ [我说] 不兜底，event_time 仍为 None。
+
+    护栏：不能因为「AI 说过话」就给每条 self_said 都盖日期。
+    P17 实测 314 条 self_said 里 105 条是「我建议他…」，全盖日期会让召回涨噪声、乱排序。
+    """
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["event_time"] = kwargs.get("event_time")
+        captured["date_kind"] = kwargs.get("date_kind")
+        return "ok"
+
+    reconstruct(
+        lambda p: "[我说] 我建议他在办公室备一件外套",
+        ["用户：窗边忽冷忽热", "助手：建议你在办公室备一件外套，风大就披上"],
+        remember,
+        now="2026-04-13",
+    )
+    assert captured["event_time"] is None
+    assert captured["date_kind"] == "none"
+
+
+def test_user_said_never_gets_now_fallback():
+    """用户说的 [事实] 永远不吃 now 兜底——哪怕助手这一轮交付了。
+
+    红线：「他前天去了杭州」的「前天」是相对上一轮说的，
+    按本轮 now 填就全错。这是 date_kind 三态存在的理由。
+    """
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["event_time"] = kwargs.get("event_time")
+        captured["date_kind"] = kwargs.get("date_kind")
+        return "ok"
+
+    reconstruct(
+        lambda p: "[事实] 他重感情",
+        ["用户：我很重感情", "助手：写好了，交稿。夜雾从樟树渡口的水面漫上来"],
+        remember,
+        now="2026-04-13",
+    )
+    assert captured["event_time"] is None
+    assert captured["date_kind"] == "none"
+
+
 def test_parse_topic_tag():
     """正文后面的「#话题：X」要切走，话题词单独存进 topic 字段，正文里不残留。"""
     items = parse_reply("[事实] 他养了狗叫瓦片 #话题：养狗\n[猜测] 他最近压力大 #话题：工作")
@@ -263,8 +334,6 @@ def test_parse_topic_tag():
     assert items[0]["topic"] == "养狗"
     assert items[1]["text"] == "他最近压力大"
     assert items[1]["topic"] == "工作"
-
-
 def test_parse_who_what_value_tags():
     """正文后面的「#人物/#维度/#值」要切走，单独存进对应字段，正文不残留。"""
     items = parse_reply(

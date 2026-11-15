@@ -36,6 +36,37 @@ _PROMPT_BOILERPLATE = {
 # （已改用 dates.py 里的 HAS_RELATIVE，这里保留注释说明语义，不再重复定义。）
 
 
+# 助手「交付/完成」类表述：这一轮 AI 真的把东西做出来交给用户了。
+#
+# 为什么要有这个：date_kind 三态里，event_time 只从「提炼后的正文」里抠日期。
+# 但实测 P17 第 91 轮，助手原话是「写好了，交稿。夜雾从樟树渡口的水面漫上来…」，
+# 提炼成 [我说] 后变成「我写的夜雾段落：夜雾从…」——正文里一个交付动词都没有，
+# 也没有任何相对时间词，于是 event_time=None、date_kind=none。
+# 结果「我写过这段」进了库，「是 4 月 13 日写的」丢了，日期题答不出来。
+#
+# 可靠的信号在助手原话里（buffer 里现成的），不在提炼后的话里。
+# 只认「真的交付了」的硬动作，不认「我建议/我提醒」这类（那是给建议，不是交付）。
+_DELIVERY = re.compile(
+    r"写好了|写完了|交了|交稿|已经?发|已经?给|办好了|弄好了|弄完了"
+    r"|做完了|改好了|整理好|装好了|补上了|看过了|查过了|问过了"
+    r"|约好了|送到了|给你写|帮你写好"
+)
+
+
+def _buffer_has_delivery(buffer):
+    """这一轮里助手是否真的说了「交付/完成」类的话。
+
+    只看助手那几行（以「助手：」开头），不看用户说的——
+    用户说「你写好了吗」是提问，不是交付。
+    """
+    for line in buffer:
+        if not line.startswith("助手："):
+            continue
+        if _DELIVERY.search(line):
+            return True
+    return False
+
+
 def parse_reply(reply):
     """
     解析模型的回答，提取 [事实]/[猜测] 条目。
@@ -281,6 +312,10 @@ def reconstruct(llm, buffer, remember_func, now=None):
     items = parse_reply(reply)
 
     # 4. 逐条写入（remember_func 会做校验 + 去重 + 存盘）
+    #
+    # 这一轮助手有没有「交付」动作，只算一次（整段 buffer 共用一个结论）：
+    # 交付那一轮里，AI 自己说的话（[我说]）确实发生了、且有确定日期（就是 now）。
+    delivered = bool(now) and _buffer_has_delivery(buffer)
     added = 0
     for it in items:
         text = it["text"]
@@ -290,6 +325,18 @@ def reconstruct(llm, buffer, remember_func, now=None):
         # 「周二午后」这类原始表述，不是推导的绝对日期），所以不再拦相对词。
         # —— 用确定性代码换算 event_time + date_kind ——
         event_time, date_kind = resolve_event_time(text, now=now)
+        # —— self_said 的兜底：AI 自己说的话，只能发生在它说话的那一轮 ——
+        # 用户的话不能这么兜：他说「我前天去了杭州」，那个「前天」是相对上一轮，
+        # 写成本轮日期就全错了。AI 自己的话没有这层歧义——它就在 now 这一天说的。
+        # 所以只对 self_said 补，且只在「正文里抠不出日期」时才补。
+        #
+        # 但只补「交付那一轮」，不补所有 self_said：P17 实测 314 条 self_said 里
+        # 262 条（83%）没有 event_time，其中 105 条是「我建议他…」这类随口给的建议。
+        # 全补会让召回提示词里每条 AI 的话后面都挂个（≈某日），噪声涨、排序乱，
+        # 而考试真正问的是「你答应/交付的东西怎么样了」——只有交付那轮才值得带日期。
+        if (event_time is None and date_kind == "none"
+                and it["source"] == "self_said" and delivered):
+            event_time, date_kind = now, "derived"
         result = remember_func(text, source=it["source"], subject=it["subject"],
                                event_time=event_time, date_kind=date_kind,
                                topic=it.get("topic"),
