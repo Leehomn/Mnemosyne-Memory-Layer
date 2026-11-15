@@ -260,3 +260,76 @@ def test_format_recall_block_marks_conflict_pair():
     block = format_recall_block([a, b])
     assert "两说未定" in block
     assert "无法确定" in block
+
+
+def test_format_recall_block_derived_date_annotated():
+    """date_kind=derived 的记忆要标「≈日期，由相对时间推算」，提醒模型这是推导的。"""
+    m = make_item("他下周三约了人", "user_said", 0.9,
+                  event_time="2026-04-15", date_kind="derived")
+    block = format_recall_block([m])
+    assert "≈2026-04-15" in block
+    assert "由相对时间推算" in block
+
+
+def test_format_recall_block_explicit_date_not_annotated():
+    """date_kind=explicit 不额外标注（原文就是日期）。"""
+    m = make_item("他 2026-04-13 约了人", "user_said", 0.9,
+                  event_time="2026-04-13", date_kind="explicit")
+    block = format_recall_block([m])
+    assert "≈" not in block
+    assert "由相对时间推算" not in block
+
+
+def test_recall_orders_by_event_time_not_created_at():
+    """时间近优先要用 event_time（事件逻辑日期），不是 created_at（系统墙钟）。
+
+    两条记忆 created_at 相同（喂历史那一刻），但事件日期一近一远；召回排序时
+    「近的那条」必须排前。这是基准里时间题的根因修复。
+    """
+    near = make_item("他 2026-05-04 交了稿", "user_said", 0.9,
+                     event_time="2026-05-04", date_kind="explicit")
+    far = make_item("他 2026-03-01 交了稿", "user_said", 0.9,
+                    event_time="2026-03-01", date_kind="explicit")
+    # 强制 created_at 相同，排除「靠墙钟顺序」碰巧排对的可能
+    far["created_at"] = near["created_at"]
+
+    got = recall([far, near], limit=2, now="2026-05-07")
+    assert got[0]["text"] == near["text"]
+
+
+def test_recall_future_event_not_overweighted():
+    """未来事件（event_time 晚于 now）不能被衰减公式抬成异常高权重。
+
+    「下周三的计划」事件日期在 now 之后，age 为负时 0.5**(负) > 1，会把未来
+    事件顶到最前。修复后应钳到 0（未来事件权重 = base*hits*confidence，不额外加码）。
+    """
+    future = make_item("他下周三约了人", "user_said", 0.9,
+                       event_time="2026-04-15", date_kind="derived")
+    past = make_item("他上周三去面试", "user_said", 0.9,
+                     event_time="2026-04-08", date_kind="derived")
+
+    got = recall([future, past], limit=2, now="2026-04-13")
+    # 两条 base/conf/hits 相同，age 都为非负后权重应相等；未来不因负 age 被抬到 >1。
+    # 这里只断言不会因为负 age 崩掉、且两条都返回。
+    assert len(got) == 2
+
+
+def test_age_label_future_event_shown_as_days_later():
+    """未来事件（event_time 晚于 now）标签应显示「N天后」，不是「刚刚」。
+
+    「刚刚」会误导模型以为这事已经发生了；未来计划该标成「未来/N天后」，
+    让模型知道这是还没发生的安排。
+    """
+    from recall import _age_label
+    m = make_item("他下周三约了人", "user_said", 0.9,
+                  event_time="2026-04-15", date_kind="derived")
+    # now=2026-04-13，事件 04-15 → 2 天后
+    assert _age_label(m, "2026-04-13") == "2天后"
+
+
+def test_age_label_today_event_shown_as_today():
+    """事件就在今天，标签是「今天」。"""
+    from recall import _age_label
+    m = make_item("他今天去体检", "user_said", 0.9,
+                  event_time="2026-04-13", date_kind="explicit")
+    assert _age_label(m, "2026-04-13") == "今天"

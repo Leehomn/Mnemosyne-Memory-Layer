@@ -205,8 +205,9 @@ class Cognition:
 
         related = semantic_recall(self.llm, items, query, now=now,
                                   embedder=self.embedder, emb_map=emb_map)
-        # 再按权重排序取前 limit
-        top = recall(related, limit=limit)
+        # 再按权重排序取前 limit（now 必须透传：时间近优先要用题目的虚拟日期算，
+        # 不能用系统墙钟，否则基准里 event_time 的排序会全错）
+        top = recall(related, limit=limit, now=now)
 
         # —— 用进废退：被真正召回的记忆，hits +1 落库 ——
         # 这里只给「被想起」的记忆 +1，和去重合并里的 occurrences 分开：

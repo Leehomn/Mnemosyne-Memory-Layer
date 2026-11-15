@@ -1,10 +1,50 @@
 # recall.py —— 召回
 
 import re
-from datetime import datetime
+from datetime import datetime, date
 
-from decay import decayed_weight, days_since, effective_half_life
+from decay import decayed_weight, effective_half_life
 from embed import rank_by_similarity, EMBED_TOP_K
+
+
+def _as_date(v):
+    """把 'YYYY-MM-DD' 字符串或 datetime/date 转成 date；失败返回 None。"""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    s = str(v).strip()
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _memory_age_days(m, now):
+    """返回「这条记忆讲的事件距 now 多少天」。
+
+    优先用 event_time（事件发生的逻辑日期），因为它比 created_at（系统记住这条
+    记忆的真实墙钟）更准地表达「这件事是多久以前发生的」。基准里 created_at 全是
+    喂历史那一刻的墙钟（如 2026-11-09），与题目虚拟日期 now（如 2026-05-04）对不上，
+    所以「几天前」「时间近优先」必须用 event_time 算；created_at 只在没 event_time
+    （纯特质「他重感情」等）时兜底。
+    """
+    ref = _as_date(now)
+    if ref is None:
+        ref = datetime.now().date()
+
+    et_d = _as_date(m.get("event_time"))
+    if et_d is not None:
+        return (ref - et_d).days
+
+    # 兜底：用 created_at（秒级时间戳），转成日期再算天数
+    try:
+        ca_d = datetime.fromtimestamp(m.get("created_at", 0)).date()
+        return (ref - ca_d).days
+    except (TypeError, OSError, ValueError):
+        return 0
 
 
 def _expand_conflicts(selected, pool):
@@ -62,7 +102,10 @@ def recall(items, limit=8, now=None):
     # 1. 给每条记忆算权重，存进 (权重, 记忆) 的列表
     scored = []
     for m in items:
-        age = days_since(m.get("created_at", 0), now)
+        # 事件距 now 多少天。未来事件（event_time 晚于 now，如「下周三的计划」）
+        # 年龄为负，衰减公式 0.5**(负值) 会把它抬成 >1 的异常高权重，这里钳到 0
+        # （未来事件还没「变旧」，不该被衰减，也不该被反向加权）。
+        age = max(_memory_age_days(m, now), 0)
         # 间隔重复：先算「被复习后变长的半衰期」，再用于衰减
         hl = effective_half_life(m.get("half_life", 14), m.get("hits", 0))
         w = decayed_weight(
@@ -79,6 +122,34 @@ def recall(items, limit=8, now=None):
 
     # 3. 只返回记忆本身，取前 limit 条
     return [m for w, m in scored][:limit]
+
+def _age_label(m, now):
+    """返回这条记忆的「多久前/未来」文字标签。
+
+    未来事件（event_time 晚于 now，如「下周三的计划」）不该显示成「刚刚」，
+    而是「N天后」；过去事件显示「刚刚 / N天前」。
+    """
+    age = _memory_age_days(m, now)
+    if age > 0:
+        return "刚刚" if age < 1 else f"{int(age)}天前"
+    if age < 0:
+        return "未来" if age > -1 else f"{-int(age)}天后"
+    return "今天"
+
+
+def _line_text(m):
+    """渲染一条记忆进提示词：正文 + （可选）推算的绝对日期标注。
+
+    date_kind=derived 时标「≈YYYY-MM-DD（由相对时间推算）」，提醒模型这是推导的；
+    explicit 不额外标注（原文就是日期）；none 不标。
+    """
+    text = m["text"]
+    dk = m.get("date_kind")
+    et = m.get("event_time")
+    if dk == "derived" and et:
+        return f"{text}（≈{et}，由相对时间推算）"
+    return text
+
 
 def format_recall_block(items):
     """
@@ -120,7 +191,7 @@ def format_recall_block(items):
         # 矛盾对标「两说未定」，让模型别擅自只选一版、要两版都提并说明不确定
         fact_keys = {(m.get("text"), m.get("created_at")) for m in facts}
         lines = "\n".join(
-            f"- {m['text']}" + ("  ⚠️两说未定" if _is_conflict_member(m, fact_keys) else "")
+            f"- {_line_text(m)}" + ("  ⚠️两说未定" if _is_conflict_member(m, fact_keys) else "")
             for m in facts
         )
         parts.append(f"关于他的事实（他说过的，可以当真）：\n{lines}")
@@ -128,7 +199,7 @@ def format_recall_block(items):
     if guesses:
         guess_keys = {(m.get("text"), m.get("created_at")) for m in guesses}
         lines = "\n".join(
-            f"- {m['text']}" + ("  ⚠️两说未定" if _is_conflict_member(m, guess_keys) else "")
+            f"- {_line_text(m)}" + ("  ⚠️两说未定" if _is_conflict_member(m, guess_keys) else "")
             for m in guesses
         )
         parts.append(f"你的猜测（不是他说的，别当事实讲）：\n{lines}")
@@ -136,7 +207,7 @@ def format_recall_block(items):
     if third_party:
         tp_keys = {(m.get("text"), m.get("created_at")) for m in third_party}
         lines = "\n".join(
-            f"- {m['text']}" + ("  ⚠️两说未定" if _is_conflict_member(m, tp_keys) else "")
+            f"- {_line_text(m)}" + ("  ⚠️两说未定" if _is_conflict_member(m, tp_keys) else "")
             for m in third_party
         )
         parts.append(f"第三方转述/书面信息（不是他亲口说的，别算到他头上）：\n{lines}")
@@ -144,7 +215,7 @@ def format_recall_block(items):
     if self_said:
         self_keys = {(m.get("text"), m.get("created_at")) for m in self_said}
         lines = "\n".join(
-            f"- {m['text']}" + ("  ⚠️两说未定" if _is_conflict_member(m, self_keys) else "")
+            f"- {_line_text(m)}" + ("  ⚠️两说未定" if _is_conflict_member(m, self_keys) else "")
             for m in self_said
         )
         parts.append(f"你之前说过的话（你自己说过的，不是他的事实）：\n{lines}")
@@ -205,13 +276,11 @@ def semantic_recall(llm, items, query, now=None, embedder=None, emb_map=None):
     # 1. 把记忆编号 + 时间一起列出来
     lines = []
     for i, m in enumerate(items):
-        # 算这条记忆大概「几天前」的，帮模型判断「近不近」
-        import time as _time
-        age_days = (_time.time() - m.get("created_at", 0)) / 86400
-        if age_days < 0:
-            age_days = 0
-        age_text = "刚刚" if age_days < 1 else f"{int(age_days)}天前"
-        lines.append(f"{i}. {m['text']}（{age_text}）")
+        # 算这条记忆大概「多久前」或「未来多久」的，帮模型判断「近不近」。
+        # 用 _memory_age_days 统一按 event_time（事件逻辑日期）算，基准里
+        # created_at 是真实墙钟、和题目虚拟日期对不上，这里已一并修掉。
+        age_text = _age_label(m, now)
+        lines.append(f"{i}. {_line_text(m)}（{age_text}）")
     lines_str = "\n".join(lines)
 
     # 2. 拼提示词

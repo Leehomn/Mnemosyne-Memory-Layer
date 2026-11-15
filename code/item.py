@@ -20,7 +20,8 @@ def make_item(text, source, confidence, layer="episode", hits=0,
               base_weight=1.0, half_life=None, created_at=None,
               subject="about_user", kind=None, occurrences=1,
               event_time=None, topic=None,
-              who=None, what=None, value=None, tier=None):
+              who=None, what=None, value=None, tier=None,
+              date_kind=None):
     """
     创建一条记忆条目（返回一个字典）。
 
@@ -32,6 +33,13 @@ def make_item(text, source, confidence, layer="episode", hits=0,
                       - created_at = 这条记忆「什么时候被记住」的（系统时间戳，用于衰减）
                       - event_time = 这条记忆「讲的是哪一天的事」的（逻辑日期，用于按日期检索/排序）
                       默认 None，老数据没有这个字段也完全兼容。
+        date_kind   : 可选。event_time 这个绝对日期的「来源可信度」：
+                      - "explicit" = 正文里原文就有的绝对日期（用户亲口说「5月4日」）
+                      - "derived"  = 正文只有相对表述（「周一」「下周三」），由代码从
+                                     锚点 + 相对词确定性推算出的日期，答题时标「≈推算」
+                      - "none"     = 这条记忆不涉及具体某天（纯特质「他重感情」）
+                      默认 None（老数据兼容，等价 none）。区分它，是为了答题时「按题选」：
+                      时间题才给绝对日期，其他题复述原文相对表述，避免「编造日期」判罚。
         topic       : 可选。这条记忆的「话题标签」字符串（如 "养狗"/"工作"）。
                       由模型在写入时顺带输出，用于将来「按话题缩小召回范围」。
                       现在只存不筛，先观察话题词质量；默认 None，老数据兼容。
@@ -76,6 +84,7 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         "half_life": half_life,
         "created_at": created_at,
         "event_time": event_time,    # 事件发生的逻辑日期（可选，None=没记/不适用）
+        "date_kind": date_kind,      # event_time 的来源：explicit=原文日期/derived=代码推算/none=不涉及具体天
         "topic": topic,              # 话题标签（可选，None=没打标签，供将来按话题召回）
         "who": who,                  # 涉及哪个具体的人（None=用户本人，写名=第三方）
         "what": what,                # 事实维度标签（可选，None=没抽，供将来按维度判冲突）
@@ -125,6 +134,10 @@ def is_valid(item):
 
     # 6. kind 若存在，必须是 trait 或 state
     if item.get("kind") is not None and item["kind"] not in ("trait", "state"):
+        return False
+
+    # 7. date_kind 若存在，必须是 none / explicit / derived 三种之一
+    if item.get("date_kind") is not None and item["date_kind"] not in ("none", "explicit", "derived"):
         return False
 
     # 全通过，合法

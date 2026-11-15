@@ -2,6 +2,8 @@
 
 import re
 
+from dates import DATE_PATTERN, HAS_RELATIVE, resolve_event_time
+
 # 行首那些「模型爱加但不是内容」的装饰：短横线、星号、圆点、数字编号、
 # markdown 加粗符号、引号。剥干净了才认得出 [事实]/[猜测]。
 _PREFIX_NOISE = re.compile(
@@ -28,16 +30,10 @@ _PROMPT_BOILERPLATE = {
 
 # 正文里该有的「绝对日期」模式。C1 用它做「带时间的事件，正文到底带没带日期」的校验。
 # 认：2026-04-13 / 2026年4月13日 / 4月13日 / 4月13号 / 13号
-_DATE_PATTERN = re.compile(
-    r"\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?"   # 2026-04-13 / 2026年4月13日
-    r"|\d{1,2}月\d{1,2}[日号]"              # 4月13日 / 4月13号
-    r"|\d{1,2}[号]"                          # 13号（最宽松）
-)
+# （已改用 dates.py 里的 DATE_PATTERN，这里保留注释说明语义，不再重复定义。）
 
 # 相对时间词：正文里还留着这些词、却没换算成绝对日期，说明模型漏换算，这条要拦下。
-_HAS_RELATIVE = re.compile(
-    r"昨天|今天|明天|前天|后天|上周|下周|这周|几号|周[一二三四五六日天]"
-)
+# （已改用 dates.py 里的 HAS_RELATIVE，这里保留注释说明语义，不再重复定义。）
 
 
 def parse_reply(reply):
@@ -222,7 +218,7 @@ def reconstruct(llm, buffer, remember_func, now=None):
     # 1. 拼提示词
     now_line = ""
     if now:
-        now_line = f"【当前日期】这段对话发生在 {now}。下面提到的「昨天/今天/明天/下周/上周/前天/后天」等相对时间，请以这个日期为基准换算成绝对日期写进正文。\n\n"
+        now_line = f"【当前日期】这段对话发生在 {now}。下面提到的「昨天/今天/明天/下周/上周/前天/后天」等相对时间，请按原样保留相对表述写进正文（如「他下周三前寄画册」「他周一送合影」），不要自己换算成日历日期。\n\n"
     prompt = (
             now_line
             + "下面是一段对话。你要从对话里，提炼出「对他这个人的新认识」，以及「你（AI）自己说过、且他可能回头问的话」。\n\n"
@@ -254,10 +250,10 @@ def reconstruct(llm, buffer, remember_func, now=None):
             "从对话里挑出下面几类新认识（没有就输出「无」）：\n"
             "1. 事件核心框架：谁、在哪、什么时候、发生了什么、结果怎样。\n"
             "2. 与他自我相关、对他有意义的事（身份、目标、价值观，比如「他第一次上台演讲」「他被老师当众批评」）。\n"
-            "3. 【最重要】任何「带时间的事件」都必须记，且必须把时间换算成绝对日期写进正文。\n"
+            "3. 【最重要】任何「带时间的事件」都必须记，且正文保留用户原话的相对时间表述。\n"
             "   - 只要对话里出现了「昨天/今天/明天/前天/后天/上周/下周/几号/周几/某月某日」，\n"
             "     或者任何「在某个时间点发生/约定/计划」的事，就必须输出一条 [事实]。\n"
-            "   - 例：「前天把迷迭香搬到窗边」→ 必须写成「他 2026-05-25 把迷迭香搬到窗边」。\n"
+            "   - 例：「前天把迷迭香搬到窗边」→ 写成「他前天把迷迭香搬到窗边」（不要写成「他 2026-05-25 把迷迭香搬到窗边」）。\n"
             "   - 禁止因为「看起来像日常琐事」就不记——带时间的琐事也是时间题要考的。\n"
             "4. 改口、纠错、变化（比如「他改主意不搬家了」「他最近戒辣了」）。\n"
             "5. 社会信息与人际关系（谁对他好、谁让他尴尬、他属于哪个群体）。\n"
@@ -288,21 +284,15 @@ def reconstruct(llm, buffer, remember_func, now=None):
     added = 0
     for it in items:
         text = it["text"]
-        # —— C1 校验：正文里若还留着相对时间词、却没换算成绝对日期 ——
-        # 「相对时间词还在 + 没有绝对日期」说明模型漏换算，这条的时间信息是坏的，
-        # 记一个「下周三」这种基准已丢的半截时间，比不记更害人。宁可漏记，不可乱记。
-        if _HAS_RELATIVE.search(text) and not _DATE_PATTERN.search(text):
-            continue
-        # —— 把正文里的绝对日期结构化抠出来，写进 event_time ——
-        # 正文里「他 2026-05-25 搬花」这类日期，是这条记忆描述的事件发生的逻辑日期。
-        # 存成独立字段，以后可以按日期检索/排序，而不是只埋在正文字符串里。
-        # 抠不到日期就传 None（表示这条记忆不涉及具体某天，比如纯特质「他重感情」）。
-        event_time = None
-        m_date = _DATE_PATTERN.search(text)
-        if m_date:
-            event_time = m_date.group(0)
+        # —— C1 校验反转：正文允许保留相对时间词（「下周三」「周一」）——
+        # 之前这里会拦下「还留着相对词、却没绝对日期」的正文。现在绝对日期交给
+        # dates.py 确定性代码算，正文要忠实保留用户原话的相对表述（判官认的是
+        # 「周二午后」这类原始表述，不是推导的绝对日期），所以不再拦相对词。
+        # —— 用确定性代码换算 event_time + date_kind ——
+        event_time, date_kind = resolve_event_time(text, now=now)
         result = remember_func(text, source=it["source"], subject=it["subject"],
-                               event_time=event_time, topic=it.get("topic"),
+                               event_time=event_time, date_kind=date_kind,
+                               topic=it.get("topic"),
                                who=it.get("who"), what=it.get("what"),
                                value=it.get("value"), tier=it.get("tier"))
         if result is not None:   # 没被去重/没失败，才算「新增」

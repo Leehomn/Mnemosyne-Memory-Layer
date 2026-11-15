@@ -112,3 +112,22 @@ def test_conflicts_with_defaults_to_empty():
     # 不传 conflicts_with 时，默认空列表（老数据兼容，无该字段也不崩）
     item = make_item("他胃疼", "user_said", 0.9)
     assert item["conflicts_with"] == []
+
+
+def test_date_kind_defaults_to_none():
+    # 不传 date_kind 时，默认 None（老数据兼容）
+    item = make_item("他胃疼", "user_said", 0.9)
+    assert item["date_kind"] is None
+
+
+def test_date_kind_stored_when_passed():
+    # 显式传 date_kind 时，原样存下
+    item = make_item("他 2026-05-25 搬花", "user_said", 0.9,
+                     event_time="2026-05-25", date_kind="explicit")
+    assert item["date_kind"] == "explicit"
+
+
+def test_date_kind_invalid_rejected():
+    # date_kind 乱写不合法
+    bad = make_item("他胃疼", "user_said", 0.9, date_kind="maybe")
+    assert is_valid(bad) is False

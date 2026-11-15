@@ -132,9 +132,9 @@ def test_parse_empty_and_blank_lines():
 
 
 def test_reconstruct_passes_now_to_prompt():
-    """now 参数要把「当前日期」拼进提示词，让模型能把相对时间换算成绝对日期。
+    """now 参数要把「当前日期」拼进提示词，让模型保留相对时间表述（不再让它心算）。
 
-    用假模型把收到的提示词原样返回，断言提示词里出现了日期 + 换算指令。
+    用假模型把收到的提示词原样返回，断言提示词里出现了日期 + 保留相对表述的指令。
     """
     seen = {}
 
@@ -145,7 +145,7 @@ def test_reconstruct_passes_now_to_prompt():
     reconstruct(capture_llm, ["用户：我下周三约了人"], lambda *a, **k: None, now="2026-04-13")
 
     assert "2026-04-13" in seen["prompt"]
-    assert "绝对日期" in seen["prompt"]
+    assert "相对表述" in seen["prompt"]
 
 
 def test_reconstruct_without_now_keeps_compat():
@@ -161,26 +161,50 @@ def test_reconstruct_without_now_keeps_compat():
     assert "当前日期" not in seen["prompt"]
 
 
-def test_relative_time_without_date_is_dropped():
-    """相对时间词还在、却没换算成绝对日期 → 该拦下（时间信息已坏，不记）。"""
-    added = reconstruct(
+def test_relative_time_is_kept_and_derived():
+    """正文保留相对时间词，event_time 由代码确定性换算，date_kind=derived。
+
+    这是反转旧行为：以前「相对词还在+没绝对日期」会被拦下不记，现在要记，
+    且绝对日期由 dates.py 从锚点 now 算出（不靠 LLM）。
+    """
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["text"] = text
+        captured["event_time"] = kwargs.get("event_time")
+        captured["date_kind"] = kwargs.get("date_kind")
+        return "ok"
+
+    reconstruct(
         lambda p: "[事实] 他下周三约了人",
         ["用户：我下周三约了人"],
-        lambda *a, **k: "ok",   # 假 remember：返回非 None，模拟「已写入」
+        remember,
         now="2026-04-13",
     )
-    assert added == 0
+    assert captured["text"] == "他下周三约了人"       # 相对表述忠实保留
+    assert captured["event_time"] == "2026-04-22"     # 4/13 是周一，下周三 = 4/22
+    assert captured["date_kind"] == "derived"
 
 
 def test_absolute_date_is_kept():
-    """换算成绝对日期后，正常落库。"""
-    added = reconstruct(
+    """正文带绝对日期时，正常落库，date_kind=explicit。"""
+    captured = {}
+
+    def remember(text, **kwargs):
+        captured["text"] = text
+        captured["event_time"] = kwargs.get("event_time")
+        captured["date_kind"] = kwargs.get("date_kind")
+        return "ok"
+
+    reconstruct(
         lambda p: "[事实] 他 2026-04-13 约了人",
         ["用户：我下周三约了人"],
-        lambda *a, **k: "ok",
+        remember,
         now="2026-04-13",
     )
-    assert added == 1
+    assert captured["text"] == "他 2026-04-13 约了人"
+    assert captured["event_time"] == "2026-04-13"
+    assert captured["date_kind"] == "explicit"
 
 
 def test_no_time_word_is_kept():
@@ -194,11 +218,12 @@ def test_no_time_word_is_kept():
 
 
 def test_event_time_extracted_from_date():
-    """正文里的绝对日期要结构化抠出来，写进 event_time。"""
+    """正文里的绝对日期要结构化抠出来，写进 event_time，date_kind=explicit。"""
     captured = {}
 
     def remember(text, **kwargs):
         captured["event_time"] = kwargs.get("event_time")
+        captured["date_kind"] = kwargs.get("date_kind")
         return "ok"
 
     reconstruct(
@@ -208,14 +233,16 @@ def test_event_time_extracted_from_date():
         now="2026-05-27",
     )
     assert captured["event_time"] == "2026-05-25"
+    assert captured["date_kind"] == "explicit"
 
 
 def test_event_time_none_without_date():
-    """正文里没有日期时，event_time 传 None（表示不涉及具体某天）。"""
+    """正文里没有日期时，event_time 传 None（表示不涉及具体某天），date_kind=none。"""
     captured = {}
 
     def remember(text, **kwargs):
         captured["event_time"] = kwargs.get("event_time")
+        captured["date_kind"] = kwargs.get("date_kind")
         return "ok"
 
     reconstruct(
@@ -224,6 +251,7 @@ def test_event_time_none_without_date():
         remember,
     )
     assert captured["event_time"] is None
+    assert captured["date_kind"] == "none"
 
 
 def test_parse_topic_tag():
