@@ -205,10 +205,6 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 
 ---
 
-## 工程收尾（已完成）
-
-- [x] `LICENSE`（Apache License 2.0）
-
 ## 开源协议
 
 本项目采用 **Apache License 2.0**，见 [LICENSE](LICENSE)。
