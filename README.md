@@ -211,7 +211,7 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 
 ## 开源协议
 
-本项目采用 **Apache License 2.0**，见 [LICENSE](LICENSE)。**做出来就开源**，用宽松协议开源给普通人免费用（初心），专利防大公司白嫖（可选），两者不冲突。
+本项目采用 **Apache License 2.0**，见 [LICENSE](LICENSE)。
 
 ---
 
