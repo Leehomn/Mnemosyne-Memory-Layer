@@ -339,6 +339,7 @@ def reconstruct(llm, buffer, remember_func, now=None):
             event_time, date_kind = now, "derived"
         result = remember_func(text, source=it["source"], subject=it["subject"],
                                event_time=event_time, date_kind=date_kind,
+                               story_time=now,
                                topic=it.get("topic"),
                                who=it.get("who"), what=it.get("what"),
                                value=it.get("value"), tier=it.get("tier"))
@@ -398,6 +399,12 @@ def consolidate(llm, episodes, remember_func, kind="state"):
     #    [转述] 的来源保持 third_party（第三方信息身份不能丢，不能被误标成推断）
     #    [我说] 保持 self_said（AI 自己说过的身份不能丢，不能被误标成推断）
     #    其余（[猜测]）标 her_inference
+    #
+    # 归纳出的印象也要有 story_time，否则它回落 created_at（回放墙钟，晚于题目 now），
+    # 年龄被算成负数→钳成 0，印象层永远不会衰减。取这批事件里最晚的那个 story_time：
+    # 印象是从这些事件里总结出来的，「多久前」按最近一次素材算才合理。
+    story = max((e.get("story_time") for e in episodes if e.get("story_time")),
+                default=None)
     added = 0
     for it in items:
         if it["source"] == "user_said":
@@ -429,6 +436,7 @@ def consolidate(llm, episodes, remember_func, kind="state"):
             layer="impression",
             kind=kind,
             confidence=confidence,
+            story_time=story,
         )
         if result is not None:
             added += 1

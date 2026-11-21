@@ -21,7 +21,7 @@ def make_item(text, source, confidence, layer="episode", hits=0,
               subject="about_user", kind=None, occurrences=1,
               event_time=None, topic=None,
               who=None, what=None, value=None, tier=None,
-              date_kind=None):
+              date_kind=None, story_time=None):
     """
     创建一条记忆条目（返回一个字典）。
 
@@ -40,6 +40,14 @@ def make_item(text, source, confidence, layer="episode", hits=0,
                       - "none"     = 这条记忆不涉及具体某天（纯特质「他重感情」）
                       默认 None（老数据兼容，等价 none）。区分它，是为了答题时「按题选」：
                       时间题才给绝对日期，其他题复述原文相对表述，避免「编造日期」判罚。
+        story_time  : 可选。这条记忆是在「故事里的哪一天」被记下来的（逻辑日期字符串）。
+                      与 created_at 区分：
+                      - created_at = 真实系统墙钟，用于 maintain() 的衰减年龄（躺了多久）
+                      - story_time = 剧情内日期（回放时的 now），用于 recall 判断「多久前」
+                      回放基准时 created_at 全是灌历史那一刻的墙钟（2026-11-09），
+                      与题目虚拟日期 now（2026-03~09）对不上，算出的年龄恒为负→钳成 0，
+                      导致「越没时间信息的记忆权重越高」。story_time 补这个缺口。
+                      默认 None，老数据兼容（此时 recall 仍回落 created_at）。
         topic       : 可选。这条记忆的「话题标签」字符串（如 "养狗"/"工作"）。
                       由模型在写入时顺带输出，用于将来「按话题缩小召回范围」。
                       现在只存不筛，先观察话题词质量；默认 None，老数据兼容。
@@ -85,6 +93,7 @@ def make_item(text, source, confidence, layer="episode", hits=0,
         "created_at": created_at,
         "event_time": event_time,    # 事件发生的逻辑日期（可选，None=没记/不适用）
         "date_kind": date_kind,      # event_time 的来源：explicit=原文日期/derived=代码推算/none=不涉及具体天
+        "story_time": story_time,    # 这条记忆在剧情里「被记下来」的那天（逻辑日期，None=老数据）
         "topic": topic,              # 话题标签（可选，None=没打标签，供将来按话题召回）
         "who": who,                  # 涉及哪个具体的人（None=用户本人，写名=第三方）
         "what": what,                # 事实维度标签（可选，None=没抽，供将来按维度判冲突）
