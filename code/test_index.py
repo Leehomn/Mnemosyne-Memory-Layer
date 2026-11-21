@@ -587,3 +587,33 @@ def test_digested_episode_not_merged(tmp_path):
     # 旧那条的 occurrences 应该还是 1（没吃到新话）
     old = [m for m in items if m["text"] == "找工作挺累的"][0]
     assert old["occurrences"] == 1
+
+
+def test_invisible_memory_gets_no_hits(tmp_path):
+    """四区都不进的记忆（0.4 的猜测）不该被 hits +1。
+
+    它会被召回、会被排序，但 format_recall_block 的四个分区一条都不收，
+    一次都不会出现在提示词里。以前照样 hits +1 落库——权重和半衰期被白白拉长，
+    「用进废退」对它等于没生效。实测真实主库里这种条目有 1812 条（17.6%）。
+    """
+    def fake_llm(prompt):
+        if "语义冲突" in prompt:
+            return "无"
+        if "他最近状态" in prompt:
+            return "0,1"          # 两条都命中
+        return "无"
+
+    cog = Cognition(data_dir=str(tmp_path), llm=fake_llm)
+    cog.remember("他养了狗", source="user_said")                      # → 事实区
+    low = cog.remember("他大概不太高兴", source="her_inference")       # conf=0.4 → 四区都不进
+
+    assert low["confidence"] == 0.4
+
+    cog.semantic_recall_block("他最近状态", limit=5)
+
+    items = load_items(cog.path)
+    fact = [m for m in items if m["text"] == "他养了狗"][0]
+    hidden = [m for m in items if m["text"] == "他大概不太高兴"][0]
+
+    assert fact["hits"] == 1      # 真正渲染进提示词的，算一次「被想起」
+    assert hidden["hits"] == 0    # 没渲染出来的，不算

@@ -4,7 +4,7 @@ import time
 
 from item import make_item, is_valid
 from store import save_items, load_items
-from recall import recall, format_recall_block, semantic_recall
+from recall import recall, format_recall_block, semantic_recall, is_rendered
 from source import default_confidence
 from embed import embed_with_cache
 
@@ -132,6 +132,13 @@ class Cognition:
                 if new_bw is not None and new_bw > old.get("base_weight", 0):
                     old["base_weight"] = new_bw
 
+                # —— story_time 取更晚的那次 ——
+                # 同一件事又被提起来，「多久前」当然按最近一次算，否则一件今天还在
+                # 说的事会因为「第一次是三个月前提的」被判成旧记忆、权重被压掉。
+                new_st = kwargs.get("story_time")
+                if new_st and str(new_st) > str(old.get("story_time") or ""):
+                    old["story_time"] = new_st
+
                 # —— 晋升判断：state 反复出现够多 → 升 trait ——
                 if (old.get("layer") == "impression"
                         and old.get("kind") == "state"
@@ -213,10 +220,17 @@ class Cognition:
         # 这里只给「被想起」的记忆 +1，和去重合并里的 occurrences 分开：
         # occurrences = 出现次数（用户说了几次），决定晋升；
         # hits       = 被想起次数（AI 主动用了它几次），决定用进废退/半衰期。
+        #
+        # 只给「会真的渲染进提示词」的条目加 hits（recall.is_rendered）。
+        # 否则低置信度的猜测（her_inference 0.4，实测主库里 1413 条）会被召回、
+        # 被加权重、被拉长半衰期，却因为 format_recall_block 的分区规则一次都不显示：
+        # 权重空转，用进废退对它们等于没生效。
         if top:
-            for m in top:
-                m["hits"] = m.get("hits", 0) + 1
-            save_items(items, self.path)
+            counted = [m for m in top if is_rendered(m)]
+            if counted:
+                for m in counted:
+                    m["hits"] = m.get("hits", 0) + 1
+                save_items(items, self.path)
 
         return format_recall_block(top)
 

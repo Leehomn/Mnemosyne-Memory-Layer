@@ -25,11 +25,12 @@ def _as_date(v):
 def _memory_age_days(m, now):
     """返回「这条记忆讲的事件距 now 多少天」。
 
-    优先用 event_time（事件发生的逻辑日期），因为它比 created_at（系统记住这条
-    记忆的真实墙钟）更准地表达「这件事是多久以前发生的」。基准里 created_at 全是
-    喂历史那一刻的墙钟（如 2026-11-09），与题目虚拟日期 now（如 2026-05-04）对不上，
-    所以「几天前」「时间近优先」必须用 event_time 算；created_at 只在没 event_time
-    （纯特质「他重感情」等）时兜底。
+    取值顺序（先准后糙）：
+      1. event_time —— 事件发生的逻辑日期，最准
+      2. story_time —— 这条记忆在剧情里被记下来的那天（回放时的 now）。没有 event_time
+         的条目（六库实测 70.3%）靠它才有区分度；created_at 是灌历史那一刻的墙钟
+         （2026-11-09），与题目虚拟日期 now（2026-03~09）对不上，算出来恒为负。
+      3. created_at —— 只在前两者都缺时兜底（真实对话里它就是准的）
     """
     ref = _as_date(now)
     if ref is None:
@@ -39,6 +40,10 @@ def _memory_age_days(m, now):
     if et_d is not None:
         return (ref - et_d).days
 
+    st_d = _as_date(m.get("story_time"))
+    if st_d is not None:
+        return (ref - st_d).days
+
     # 兜底：用 created_at（秒级时间戳），转成日期再算天数
     try:
         ca_d = datetime.fromtimestamp(m.get("created_at", 0)).date()
@@ -47,7 +52,7 @@ def _memory_age_days(m, now):
         return 0
 
 
-def _expand_conflicts(selected, pool):
+def _expand_conflicts(selected, pool, max_extra=None):
     """
     把「两说未定」的矛盾对成对召回：selected 里命中任一方，自动带上「仍存活」的
     另一方（从 pool 里按 (text, created_at) 找到）。
@@ -55,16 +60,25 @@ def _expand_conflicts(selected, pool):
     pool 是「已过滤掉墓碑」的全部存活记忆；selected 是当前要返回的一小撮
     （可能因为 limit 或排序被砍掉了矛盾对的另一方）。矛盾对的另一方若已被删
     （不在 pool 里），说明矛盾已解决，不带。
+
+    max_extra : 最多补几条，防止一个大的「矛盾簇」把召回块撑爆。
+                不传就不限（老行为）。真实库里最大的簇是 6 条（卷卷猫粮），
+                若 top8 里落进两个锚点，一次能补出 4 条——提示词会涨 50%，所以
+                recall() 里传 len(top) 作上限，最多翻一倍。
     """
     by_key = {(m.get("text"), m.get("created_at")): m for m in pool}
     out = list(selected)
     seen = {(m.get("text"), m.get("created_at")) for m in out}
+    added = 0
     for m in selected:
         for ref in m.get("conflicts_with", []):
+            if max_extra is not None and added >= max_extra:
+                return out
             key = (ref.get("text"), ref.get("created_at"))
             if key in by_key and key not in seen:
                 out.append(by_key[key])
                 seen.add(key)
+                added += 1
     return out
 
 
@@ -89,19 +103,14 @@ def recall(items, limit=8, now=None):
         now   : 当前时间（不传就用系统现在）
 
     返回：
-        按权重排序后的前 limit 条
+        按权重排序后的前 limit 条（矛盾对的另一方会额外补在后面，故可能多于 limit）
     """
     # 先过滤掉已失效（墓碑）的记忆
     alive = [m for m in items if not m.get("deleted")]
 
-    # 矛盾对成对召回：命中一方带另一方，让「两说未定」一起进结果。
-    # 注意：recall 的 items 只是「待选池」，先扩矛盾对再排序取前 limit，
-    # 否则矛盾对另一方可能因权重低被 limit 砍掉。
-    items = _expand_conflicts(alive, alive)
-
     # 1. 给每条记忆算权重，存进 (权重, 记忆) 的列表
     scored = []
-    for m in items:
+    for m in alive:
         # 事件距 now 多少天。未来事件（event_time 晚于 now，如「下周三的计划」）
         # 年龄为负，衰减公式 0.5**(负值) 会把它抬成 >1 的异常高权重，这里钳到 0
         # （未来事件还没「变旧」，不该被衰减，也不该被反向加权）。
@@ -120,8 +129,18 @@ def recall(items, limit=8, now=None):
     # 2. 按权重从高到低排序
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # 3. 只返回记忆本身，取前 limit 条
-    return [m for w, m in scored][:limit]
+    # 3. 取前 limit 条
+    top = [m for w, m in scored][:limit]
+
+    # 4. 矛盾对成对召回：命中一方，补上「仍存活」的另一方。
+    #    必须在 limit 之后扩：先扩再取前 limit，配对占两个名额、反而把别的挤掉；
+    #    而且原写法 _expand_conflicts(alive, alive) 传同一个列表，seen 已含全部，
+    #    是空操作——注释说的「先扩再排序」从来没发生过。
+    #    扩的池子是「全部存活记忆」alive，不是 top 子集：另一方权重低被 limit 砍掉时
+    #    也要能找回来，这正是「两说未定」的意义。
+    #    补的上限是 len(top)：真实库里最大的矛盾簇有 6 条，不限的话一次能补出好几条，
+    #    召回块可能涨一倍、稀释提示词。
+    return _expand_conflicts(top, alive, max_extra=len(top))
 
 def _age_label(m, now):
     """返回这条记忆的「多久前/未来」文字标签。
@@ -151,6 +170,46 @@ def _line_text(m):
     return text
 
 
+def _split_zones(items):
+    """把记忆分进四个区：事实 / 猜测 / 第三方 / 我说过的话。
+
+    抽成独立函数，是为了让调用方（如 index.semantic_recall_block）能问一句
+    「这条到底会不会被渲染出来」——以前它抽不出来，于是给一批根本不会显示
+    的 0.4 置信度猜测也加了 hits。
+
+    分区判据（与设计定稿 6.x 一致）：
+    - 事实区：confidence >= 0.8 且 subject != about_self（不看来源：
+      her_inference 升到 0.9 视为「已被验证」，进事实区）
+    - 第三方转述：source == third_party（默认 0.5，进不了事实区）
+    - 我说过的话：subject == about_self（不设置信度门槛，AI 自己的话是确定的）
+    - 猜测区：her_inference 且 0.6 <= confidence < 0.8
+    - 都不满足的：返回的四个列表里都没有 → 渲染时被静默丢弃
+
+    注意「四区都不进」是有意为之：< 0.6 的猜测从没被验证过，放进提示词只会引导
+    AI 顺着没把握的猜测编造。
+    """
+    facts = [m for m in items
+             if m.get("confidence", 0.5) >= 0.8
+             and m.get("subject") != "about_self"]
+    third_party = [m for m in items if m.get("source") == "third_party"]
+    self_said = [m for m in items if m.get("subject") == "about_self"]
+    guesses = [m for m in items
+               if m.get("source") == "her_inference"
+               and 0.6 <= m.get("confidence", 0.5) < 0.8]
+    return facts, guesses, third_party, self_said
+
+
+def is_rendered(m):
+    """这条记忆会不会出现在 format_recall_block 的输出里。
+
+    index.semantic_recall_block 用它做「用进废退」的过滤：只有真正被渲染进提示词、
+    真的被「想起来」的记忆才该 hits +1。否则给一条永远不显示的 0.4 猜测加 hits，
+    只是把它的半衰期拉长、权重抬高，却在召回里一次都不出现——权重被白白消耗。
+    """
+    facts, guesses, third_party, self_said = _split_zones([m])
+    return bool(facts or guesses or third_party or self_said)
+
+
 def format_recall_block(items):
     """
     把召回的记忆，格式化成「事实区 / 猜测区 / 我说过的话区」分离的文字块。
@@ -164,27 +223,7 @@ def format_recall_block(items):
     返回：
         一段格式化文字；没有记忆则返回空字符串
     """
-    # 事实：用户说的，高置信，且不是「关于AI自己」的
-    facts = [m for m in items
-             if m["confidence"] >= 0.8  # 置信度够高 = 被证实（不管来源）
-             and m["subject"] != "about_self"]
-
-    # 第三方转述：source=third_party（别人说的/书面写的）。置信 0.5，进不了事实区
-    # 也进不了猜测区（那是 her_inference 专属），单独一格，标「别当用户亲口的事实」。
-    # 设计定稿 5.1：third_party 必须带说话人，禁止算到对话对象头上。
-    third_party = [m for m in items if m.get("source") == "third_party"]
-
-    # 我说过的话：关于 AI 自己的（about_self），单独一区。
-    # 置信度不设门槛——AI 自己说过的话是确定的（self_said 出生即 0.9），不是猜。
-    self_said = [m for m in items if m.get("subject") == "about_self"]
-
-    # 猜测：AI 自己推断的，且置信度「中等」才进猜测区。
-    # 0.6 ~ 0.8：被验证过一部分、但还没到「可以当真」的程度 → 进猜测区，标「别当事实」。
-    # < 0.6：出生默认 0.4、从没验证过 → 连猜测区都不进（免得顺着没把握的猜测乱编）。
-    # >= 0.8：已经和事实区重叠了，这里要排除——一条被证实的猜测不能既当事实又当猜测。
-    guesses = [m for m in items
-               if m["source"] == "her_inference"
-               and 0.6 <= m["confidence"] < 0.8]
+    facts, guesses, third_party, self_said = _split_zones(items)
 
     parts = []
     if facts:
@@ -253,7 +292,8 @@ def semantic_recall(llm, items, query, now=None, embedder=None, emb_map=None):
         相关的记忆列表（可能为空）
     """
     # 先过滤掉已失效（墓碑）的记忆
-    items = [m for m in items if not m.get("deleted")]
+    alive = [m for m in items if not m.get("deleted")]
+    items = alive
     if not items:
         return []
 
@@ -318,5 +358,7 @@ def semantic_recall(llm, items, query, now=None, embedder=None, emb_map=None):
 
     related = [items[i] for i in ids]
     # 矛盾对成对召回：命中一方，带上「仍存活」的另一方（两说未定一起出）。
-    # pool 用已过滤墓碑的全部 items，另一方被删了就不会带。
-    return _expand_conflicts(related, items)
+    # pool 必须用「全部存活记忆」alive，不能用 items——有 embedder 时 items 已被
+    # 向量粗筛成 top100 子集，另一方不在 top100 里就永远扩不进来。
+    # alive 里已过滤墓碑，另一方被删了就不会带。
+    return _expand_conflicts(related, alive)
