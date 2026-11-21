@@ -199,6 +199,59 @@ def test_parse_conflict_reply_none():
     assert _parse_conflict_reply("无", 3) == ([], [])
 
 
+# —— 以下 5 条是 2026-11-15 实测复现的 P0 误删路径 ——
+
+
+def test_parse_conflict_reply_negation_deletes_nothing():
+    """「都不构成推翻，逐条看：0,1,2」是模型在说「没冲突」，不是列举。
+
+    旧实现只判 `"推翻" in text`，命中后按关键词切段，把 0/1/2 全归进推翻段
+    → 三条记忆全被打墓碑。
+    """
+    sup, con = _parse_conflict_reply("都不构成推翻，逐条看：0,1,2", 3)
+    assert sup == []
+    assert con == []
+
+
+def test_parse_conflict_reply_date_not_treated_as_ids():
+    """「2026-05-25 那条只是概括」里的日期不能被拆成编号 5 和 25。"""
+    sup, con = _parse_conflict_reply("推翻：无\n矛盾：无\n（2026-05-25 那条只是概括）", 50)
+    assert sup == []
+    assert con == []
+
+
+def test_parse_conflict_reply_date_next_to_real_id():
+    """真编号和日期同时出现时，只认真编号。"""
+    sup, con = _parse_conflict_reply("推翻：49 那条，因为他 2026-05-25 说的是另一件事", 50)
+    assert sup == [49]
+    assert con == []
+
+
+def test_parse_conflict_reply_alternating_segments():
+    """段落交替（矛盾 / 推翻 / 矛盾）时，第三段不能丢、不能错归。
+
+    旧实现用 find() 只取每个关键词首次出现处，末段又吃到全文，
+    第三段的编号 3 会被错归进推翻段。
+    """
+    sup, con = _parse_conflict_reply("矛盾：0\n推翻：1\n矛盾：3", 5)
+    assert sup == [1]
+    assert con == [0, 3]
+
+
+def test_parse_conflict_reply_no_overlap_sup_wins():
+    """同一编号同时出现在两段 → 归推翻，不重复。"""
+    sup, con = _parse_conflict_reply("推翻：0,1\n矛盾：0", 5)
+    assert sup == [0, 1]
+    assert con == []
+
+
+def test_parse_conflict_reply_parenthesized_label():
+    """「（1）推翻：0；（2）矛盾：2」这种带行内小序号的格式也要能解析。"""
+    sup, con = _parse_conflict_reply("（1）推翻：0；（2）矛盾：2", 5)
+    assert sup == [0]
+    assert con == [2]
+
+
 def test_preselect_drops_unrelated():
     """话题粗筛：新话「狗叫瓦片」不该和「他肩膀紧」这类字面完全不沾边的旧话比对。"""
     items = [

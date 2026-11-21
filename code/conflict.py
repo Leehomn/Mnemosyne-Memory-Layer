@@ -43,10 +43,32 @@ def _preselect(new_text, items):
     return [m for j, m in scored[:_PRESELECT_MAX_ITEMS]]
 
 
+# 编号必须「前后都不挨着数字或连字符」。
+# 旧写法 re.findall(r"\d+", seg) 会把 "2026-05-25" 拆成 2026/05/25，
+# 于是「2026-05-25 那条只是概括」被读成编号 5 和 25，误删两条记忆。
+_ID = re.compile(r"(?<![\d-])(\d+)(?![\d-])")
+
+# 标签：前面必须是行首或分隔符，后面跟冒号（中间容忍「的编号」「如下」这类几个字）。
+# 这样「都不构成推翻，逐条看：0,1,2,3」里的「推翻」不算标签——它前面是「成」，
+# 不在分隔符集合里，本来就不该被当成段首。
+_LABEL = re.compile(
+    r"(?:^|[\s。；;，、：:！!？?）)])"
+    r"(?:[（(]\s*\d+\s*[）)][ \t]*)?"      # 容忍「（1）推翻：」这种行内小序号
+    r"(推翻|矛盾)[^：:\n]{0,8}?[：:]"
+)
+
+# 整段带否定语气（都不构成推翻 / 没有需要推翻的）时，不做任何标记。
+_NEGATION = re.compile(r"不|没|无|非|未|别|构不成")
+
+
 def _ids_in(segment, n):
-    """从一段文字里抓出所有合法编号（0 ~ n-1），去重、越界忽略。"""
+    """从一段文字里抓出所有合法编号（0 ~ n-1），去重、越界忽略。
+
+    数字必须独立成词：前后不挨数字、不挨连字符。这样日期 "2026-05-25"
+    不会被当成编号 5 / 25，但「第 3 条」「3、7」里的 3 和 7 能正常抓到。
+    """
     ids = []
-    for token in re.findall(r"\d+", segment):
+    for token in _ID.findall(segment):
         idx = int(token)
         if 0 <= idx < n and idx not in ids:
             ids.append(idx)
@@ -63,6 +85,10 @@ def _parse_conflict_reply(reply, n):
 
     健壮性：
     - 只有「推翻」段 → 矛盾为空；只有「矛盾」段 → 推翻为空。
+    - 段落交替出现（矛盾 / 推翻 / 矛盾）→ 各自归位，不丢第三段。
+    - 同一编号同时出现在两段 → 按推翻处理（明确纠错优先于两说未定）。
+    - 编号必须独立成词，日期「2026-05-25」不会被读成编号 5 和 25。
+    - 「都不构成推翻，逐条看：0,1,2」这类否定句 → 不做任何标记（模型说的是没冲突）。
     - 完全认不出分段（纯数字 / 乱格式）→ 默认全部按「矛盾」处理（都不删）。
       理由：宁可漏删，不可乱删。删错的代价（「没解释的矛盾」继续崩 + 假记忆）
       远大于多标几条矛盾对（可被后续明确纠错收敛）。
@@ -77,30 +103,32 @@ def _parse_conflict_reply(reply, n):
     if text == "无":
         return superseded, contradictions
 
-    has_sup = "推翻" in text
-    has_con = "矛盾" in text
-
-    if not has_sup and not has_con:
-        # 认不出分段 → 默认全矛盾（不删）
+    matches = list(_LABEL.finditer(text))
+    if not matches:
+        # 认不出分段 -> 默认全矛盾（不删），呼应宁可漏删不可乱删。
+        # 但整段带否定语气时（「都不构成推翻，逐条看：0,1,2」）不该标任何东西——
+        # 模型是在说「没有冲突」，不是在列矛盾对。
+        if _NEGATION.search(text):
+            return superseded, contradictions
         return superseded, _ids_in(text, n)
 
-    # 按关键词切段：每个关键词取「它出现处」到「下一个关键词出现处」之间
-    positions = []
-    for kw in ("推翻", "矛盾"):
-        idx = text.find(kw)
-        if idx >= 0:
-            positions.append((idx, kw))
-    positions.sort()
+    # 逐个标签取「它到下一个标签之前」的内容。用 finditer 而不是 find，
+    # 是因为模型会交替输出（矛盾 / 推翻 / 矛盾），旧写法只认每个关键词的
+    # 首次出现，末段又吃到全文，第三段里的编号会整段丢失或错归。
+    for i, m in enumerate(matches):
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        # 只取标签所在那一行：模型常在编号后面补一句解释，
+        # 那句子里的数字（日期、条数）不是编号。
+        body = text[start:end].split("\n")[0]
+        bucket = superseded if m.group(1) == "推翻" else contradictions
+        for idx in _ids_in(body, n):
+            if idx not in bucket:
+                bucket.append(idx)
 
-    segments = {}
-    for i, (idx, kw) in enumerate(positions):
-        end = positions[i + 1][0] if i + 1 < len(positions) else len(text)
-        segments[kw] = text[idx:end]
-
-    if "推翻" in segments:
-        superseded = _ids_in(segments["推翻"], n)
-    if "矛盾" in segments:
-        contradictions = _ids_in(segments["矛盾"], n)
+    # 同一编号不能同时进两段：推翻优先（明确纠错 > 两说未定）。
+    sup_set = set(superseded)
+    contradictions = [i for i in contradictions if i not in sup_set]
 
     return superseded, contradictions
 
