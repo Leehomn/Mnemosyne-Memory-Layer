@@ -166,3 +166,89 @@ def test_two_weeks_later_day():
     et, kind = resolve_event_time("他下下周三入职", now="2026-05-07")
     assert et == "2026-05-20"
     assert kind == "derived"
+
+
+# —— 以下 9 条是 2026-11-15 加的：四处日期缺陷 + 裸号收窄 ——
+
+
+def test_big_before_yesterday():
+    """「大前天」不能被「前天」抢先匹配。"""
+    et, kind = resolve_event_time("他大前天去了杭州", now="2026-05-04")
+    assert et == "2026-05-01"
+    assert kind == "derived"
+
+
+def test_big_after_tomorrow():
+    et, kind = resolve_event_time("他大后天回来", now="2026-05-04")
+    assert et == "2026-05-07"
+    assert kind == "derived"
+
+
+def test_cn_numeral_month_day():
+    """「七月四号」是中文数字月份，原文解析不出来会退到 created_at 造出编造日期。"""
+    et, kind = resolve_event_time("他打算七月四号搬家", now="2026-05-24")
+    assert et == "2026-07-04"
+    assert kind == "explicit"
+
+
+def test_cn_numeral_bare_day():
+    et, kind = resolve_event_time("他二十号交稿", now="2026-05-24")
+    assert et == "2026-05-20"
+    assert kind == "explicit"
+
+
+def test_cn_numeral_thirty_one():
+    et, kind = resolve_event_time("他三十一号结账", now="2026-05-24")
+    assert et == "2026-05-31"
+    assert kind == "explicit"
+
+
+def test_written_month_not_overridden_by_month_offset():
+    """「上个月说6月19号交房租」：月份写明了就是 6 月，「上个月」说的是说话时机。
+
+    旧实现把 _month_delta 的 -1 叠上去，读成 4-19，把用户的 6 月整个丢掉。
+    """
+    et, kind = resolve_event_time("他上个月说6月19号交房租", now="2026-05-04")
+    assert et == "2026-06-19"
+    assert kind == "explicit"
+
+
+def test_last_year_keeps_year():
+    """「去年7月4号」不能被补成今年。"""
+    et, kind = resolve_event_time("他去年7月4号搬的家", now="2026-05-24")
+    assert et == "2025-07-04"
+    assert kind == "explicit"
+
+
+def test_periodic_sentence_is_not_a_date():
+    """「每个月5号交房租」是周期句，不能固化成 2026-05-05 这一次。"""
+    for text in ("他每个月5号交房租", "他每周三去健身"):
+        et, kind = resolve_event_time(text, now="2026-05-24")
+        assert et is None, f"周期句被抠成日期: {text} -> {et}"
+        assert kind == "none"
+
+
+def test_periodic_guarded_only_on_the_adjacent_date():
+    """周期词只拦它后面紧挨着那个日期，同句里别处的真日期照常抠。
+
+    「他每天都很累，5号那天交了稿」里的 5 号是真的某一天，不能一起拦掉。
+    """
+    et, kind = resolve_event_time("他每天都很累，5号那天交了稿", now="2026-05-24")
+    assert et == "2026-05-05"
+    assert kind == "explicit"
+
+
+def test_periodic_weekday_falls_through_to_real_one():
+    """「他每周三去健身，上周三没去」要落到上周三，不能停在「每周三」。"""
+    et, kind = resolve_event_time("他每周三去健身，上周三没去", now="2026-05-24")
+    assert et == "2026-05-13"
+    assert kind == "derived"
+
+
+def test_numbered_object_extended_negatives():
+    """裸「X号」的负向断言要覆盖桌/台风/校区/选手/柜等常见名词。"""
+    for text in ("他 3号桌 有人", "8号台风要来了", "他住5号校区",
+                 "他是1号选手", "他在7号柜放着"):
+        et, kind = resolve_event_time(text, now="2026-05-24")
+        assert et is None, f"误判成日期: {text} -> {et}"
+        assert kind == "none"
