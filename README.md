@@ -9,10 +9,10 @@
 
 ## 状态
 
-**核心机制已实现，可运行。** 11 个模块齐全，`pytest` 测试 140 条全部通过，已接入真实模型。
+**核心机制已实现，可运行。** 12 个模块齐全，`pytest` 测试 241 条全部通过，已接入真实模型。
 
 - 代码：`code/` 目录
-- 测试：`code/test_*.py`（11 份），运行 `python -m pytest` 全绿
+- 测试：`code/test_*.py`（13 份），运行 `python -m pytest` 全绿（241 passed）
 - 跑分：`benchmark/` 目录（第三方基准适配器 + 判官 + 成绩记录）
 - 版本管理：Git（仓库根在当前目录，分支 `master`）
 
@@ -42,13 +42,14 @@
 | 夜间整合 | consolidate，事件 → 印象（`digested` 记账防重复归纳） | `reconstruct.py` / `index.py` |
 | 语义召回 | semantic_recall，用模型判断相关性（含时间远近、反义/过时识别） | `recall.py` |
 | **语义粗筛** | 召回前先算向量，按余弦相似度取 top K 再喂模型细判，把「全库几千条」砍到「top 100」，省 token 不丢语义相关 | `embed.py` / `recall.py` |
-| **时间锚点** | `reconstruct` 的 `now` 参数，让模型把「下周三」「前天」换算成绝对日期写进记忆；相对时间没换算成绝对日期则拦下不记（C1）；日期结构化存进 `event_time` 字段 | `reconstruct.py` / `item.py` |
+| **时间锚点** | `reconstruct` 的 `now` 参数，让模型把「下周三」「前天」换算成绝对日期写进记忆；相对时间没换算成绝对日期则拦下不记（C1）；日期结构化存进 `event_time` 字段；换算由 `dates.py` 做确定性解析（支持中文数字日期、大前/后天、去年/明年跨年，排除「每月15号」这类周期句） | `reconstruct.py` / `dates.py` / `item.py` |
+| **剧情时间 vs 真实时间** | `story_time`（剧情内日期）与 `created_at`（真实墙钟）分开：前者算「这件事多久以前」，后者算「这条记忆该不该忘」。回放历史时两者相差数月，合并会让衰减失效 | `item.py` / `recall.py` / `reconstruct.py` |
 | **冲突检测** | find_conflicts，新记忆推翻旧记忆时自动识别；总原则「默认不删、宁可少删不可乱删」，只有明确纠错或同维度不同值才删 | `conflict.py` |
 | **软删除 + 墓碑** | 被推翻的记忆标 `deleted` 而不真删，可追溯、可恢复 | `item.py` / `recall.py` / `index.py` |
 | **结构化字段（为按人分库铺路）** | `who`（涉及谁）/ `what`（事实维度）/ `value`（具体值）/ `tier`（关系等级 0~3）四字段，写入时模型顺带吐标签，只存不筛 | `item.py` / `reconstruct.py` |
 | **验证机制** | 两层触发：有不确定印象（规则）+ 用户敞开心扉（模型） | `verify.py` |
 
-**11 个模块**：`decay` / `item` / `store` / `recall` / `source` / `reconstruct` / `conflict` / `verify` / `llm` / `embed` / `index`
+**12 个模块**：`decay` / `item` / `store` / `recall` / `source` / `reconstruct` / `conflict` / `verify` / `llm` / `embed` / `index` / `dates`
 
 > 注：`llm.py` 是模型接入层（不参与记忆逻辑）；`conflict.py` / `verify.py` 是「记忆修正」的被动与主动两半。
 
@@ -185,7 +186,7 @@ cog.update_confidence(target, 0.9, reason="验证确认")
 ## 环境说明
 
 - **Python**：`python` = 3.14.7（`C:\Users\pc\AppData\Local\Python\pythoncore-3.14-64`），pytest 装在这里
-- **跑测试**：在 `code/` 目录下 `python -m pytest`（140 passed）
+- **跑测试**：在 `code/` 目录下 `python -m pytest`（241 passed）
 - **依赖**：只有 `openai`（调 DeepSeek 用）；不接模型时纯标准库
 - **Git**：仓库在项目根目录，提交历史见 `git log`（部分 shell 里 `git.exe` 不在 PATH，需在 PyCharm 终端或配好 PATH 后使用）
 

@@ -2,8 +2,8 @@
 
 > 配套 `DESIGN.md`。这里写「长什么样」，不写「为什么这样」。
 >
-> **状态（2026-11-09）**：**已实施**，本文档已同步至实际 Python 代码。
-> 11 个模块、140 条测试全绿。
+> **状态（2026-11-22）**：**已实施**，本文档已同步至实际 Python 代码。
+> 12 个模块、241 条测试全绿。
 >
 > **历史说明**：本文件最初（2026-10-24）是给 **Node.js / `.mjs`** 写的规格。
 > 2026-10-25 技术选型改为 **Python**（理由：开发者正在学 Python，学以致用；
@@ -60,7 +60,7 @@
 code/
 ├── data/
 │   └── items.json          # 所有条目（单文件，便于备份）
-└── *.py                    # 11 个模块 + 测试 + demo
+└── *.py                    # 12 个模块 + 测试 + demo
 ```
 
 实际实现**没有** `sessions.json` 和 `audit/` 审计日志——这是原设计的过度设计，
@@ -72,7 +72,7 @@ code/
 
 ---
 
-## 2. 模块划分（实际 11 个模块）
+## 2. 模块划分（实际 12 个模块）
 
 ```
 code/
@@ -86,12 +86,13 @@ code/
 ├── verify.py          验证机制（反证修正·主动）
 ├── llm.py             DeepSeek 接入层
 ├── embed.py           语义向量（embedding）与余弦相似度（召回前粗筛）
+├── dates.py           日期解析（相对偏移 / 中文数字 / 周期句排除，确定性换算）
 └── index.py           统一入口 Cognition 类
 
-测试（11 份，140 条）：
+测试（13 份，241 条）：
 test_decay / test_item / test_store / test_source / test_recall
 test_reconstruct / test_conflict / test_consolidate / test_verify / test_index
-test_embed
+test_embed / test_dates / test_llm
 
 demo：
 demo_1.py（无模型）、demo_semantic_recall.py、demo_llm_verify.py、chat_demo.py、chat-loop.py
@@ -318,7 +319,7 @@ embed_with_cache(embedder, texts, cache)              # 批量算向量 + 缓存
 
 ### 6.1 现状
 
-**140 条测试，11 份文件，全部离线（fake_llm），跑一次 0.11 秒。**
+**241 条测试，13 份文件，全部离线（fake_llm），跑一次约 1~3 秒。**
 分布见 `Mnemosyne-设计定稿.md` §10.1。
 
 ### 6.2 禁止的测试写法（红线）
